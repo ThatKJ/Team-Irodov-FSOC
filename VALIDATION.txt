@@ -162,6 +162,37 @@ Step 8 - telemetry + benchmarking (CMake 4.4 / Ninja / Apple clang, C++20, OpenC
 - ASan/UBSan build: PASS (all 8 test executables + step7/step8 smokes, no findings)
 - Step 1-7 regression: step1_math_smoke still ~0.001 deg; step2-7 smokes unchanged
 
+Step 9 - engineering camera-view visualization (CMake 4.4 / Ninja / Apple clang,
+C++20, OpenCV 5.0.0 incl. videoio):
+- CMake configure/build: PASS, no new project warnings; new fsoc_visualization
+  library links fsoc::simulation + fsoc::telemetry + opencv core/imgproc/imgcodecs
+  (+ opencv_videoio, FSOC_HAS_VIDEOIO). Observer-only: annotate() reads
+  SimulationStepResult + TelemetryRecord; grep of src/visualization.cpp shows no
+  runner/detector/controller/camera/trajectory reach-back. Step 7/8 sources NOT
+  modified.
+- CTest: PASS (9 executables) - fsoc_step1..9_tests
+- fsoc_step9_tests: PASS (15 checks): annotate() returns CV_8UC3 of the input size;
+  input CV_8UC1 byte-for-byte unchanged; empty / CV_8UC3 / CV_32FC1 input rejected;
+  crosshair at (cols/2, rows/2) and moves with a 800x600 frame (not hardcoded);
+  detection marker at telemetry.detected_* NOT at the truth projection nor centre;
+  no marker / no error vector when TargetLost; error vector present when a
+  TrackingError exists; TRACKING vs TARGET LOST images differ; saturation indicator
+  only when the flag is set; PAN/TILT and SIM/FRAME HUD reflect telemetry values;
+  repeated annotation byte-identical; all overlays off -> plain cvtColor(GRAY2BGR);
+  truth marker off by default, distinct square when enabled; annotate() does not
+  mutate result/telemetry; MANDATORY non-interference: 500 frames run with vs
+  without annotation -> identical SimulationStepResult sequence and the base frame
+  is byte-identical every frame; Step 1-8 regression assertions
+- step9_visualization_smoke: PASS - wrote 28 PNGs to generated/step9/ + optional
+  generated/step9_{static,sinusoidal}.mp4. Static story frame 0: ang_err 4.128 deg,
+  cmd pan 30.0 deg/s (PAN RATE LIMIT) -> final frame: beacon on crosshair,
+  ang_err 0.0000 deg, cmd 0 deg/s. Sinusoidal 500/500 detected, RMS 0.565 deg.
+  Target-lost frame: TARGET LOST, no detection marker, no error vector, cmd 0.
+- MANUAL VISUAL REVIEW: static_0000.png / static_0074.png / lost_lost.png inspected
+  and match the required story.
+- ASan/UBSan build: PASS (all 9 test executables + step8/step9 smokes, no findings)
+- Step 1-8 regression: step1_math_smoke still ~0.001 deg; step2-8 smokes unchanged
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -175,3 +206,4 @@ macOS target workflow:
   ./build/debug/step6_pid_smoke
   ./build/debug/step7_closed_loop_smoke
   ./build/debug/step8_telemetry_smoke
+  ./build/debug/step9_visualization_smoke

@@ -20,7 +20,7 @@
 - [x] Target-loss behavior — no detection -> PID reset + zero command + camera holds (no search mode)
 - [x] Rate saturation telemetry — `pan_saturated` / `tilt_saturated` + `command_saturation_fraction` benchmark metric
 - [x] Parameterized benchmark scenarios — static / linear / sinusoidal closed / sinusoidal open, `BenchmarkMetrics` (RMS / P95 / max)
-- [ ] OpenCV visualization
+- [x] OpenCV visualization — `fsoc_visualization`, observer-only `TrackingVisualizer` (CV_8UC1 -> annotated CV_8UC3), headless PNG/MP4 export
 - [ ] Plot/export telemetry for judging
 - [ ] Baseline acceptance metrics met
 - [ ] Freeze `v1_baseline`

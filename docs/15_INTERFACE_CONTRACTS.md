@@ -231,3 +231,40 @@ Layers stay distinct — do not alias them:
   with `std::chrono::steady_clock` around the step loop **only** (telemetry conversion and
   CSV I/O excluded) and never feed the simulation timestep. The two rates are reported
   separately (`50 Hz` simulation vs `~4700 FPS` processing / `~90×` real time).
+
+## Engineering visualization contract (Step 9, frozen)
+
+- **Observer only.** `fsoc_visualization` (`fsoc/visualization.hpp` + `src/visualization.cpp`)
+  depends on `fsoc::simulation` + `fsoc::telemetry` + OpenCV core/imgproc/imgcodecs (and
+  `videoio` iff present). `TrackingVisualizer::annotate()` reads a `SimulationStepResult` +
+  `TelemetryRecord` and **never** calls back into the runner / detector / PID / camera /
+  trajectory. Running a simulation with vs without visualization yields a bit-identical
+  `SimulationStepResult` sequence (`test_visualization_non_interference`, 500 frames).
+- **The perception frame is untouched.** `annotate(const cv::Mat& grayscale_frame, …)` takes
+  the `CV_8UC1` frame by const reference and leaves it **byte-for-byte identical**; it
+  returns a **new `CV_8UC3` BGR** image of the same size (`cv::cvtColor(GRAY2BGR)` into a
+  fresh buffer, then draws). Overlay pixels can never reach the detector. Empty /
+  non-`CV_8UC1` input → `std::invalid_argument`.
+- **Base-frame reconstruction — no runner change.** `SimulationRunner` /
+  `SimulationStepResult` are unchanged. The base frame for a result is
+  `SyntheticCameraRenderer{config.renderer}.render(result.observation)` — byte-identical to
+  the frame the runner detected on (the renderer is deterministic, Step 4). No `cv::Mat` is
+  stored in `SimulationStepResult` / `TelemetryRecord`.
+- **Overlays** (full table + colour semantics in `docs/09_VISUALIZATION.md`): centre
+  crosshair from `(cols/2, rows/2)` (not hardcoded); detection marker at
+  `telemetry.detected_*` (absent when `TargetLost` — no fake marker); centre→detected error
+  vector (shown iff a `TrackingError` exists; shrinks to zero on convergence); `TRACKING` /
+  `TARGET LOST` from `telemetry.tracking_state`; `VISIBLE` vs `DETECTED` (distinct); SIM /
+  FRAME; PAN / TILT / ANG ERR / ERR PX; CMD rates with amber `RATE LIMIT` driven by the
+  Step-8 `*_saturated` flags. HUD values are degrees for humans; physics stays radians.
+- **Colours (BGR, fixed):** green = tracking, red = target lost, amber = saturation/limit,
+  white-grey = crosshair/neutral data, cyan = optional TRUTH marker.
+- **Truth vs detection.** The default demo view emphasises the **detected** centroid. The
+  exact projection (`DETECT ERR` line and `TRUTH` square marker) is **off by default**; when
+  enabled it is a visibly distinct labelled marker and is never fed into control.
+- **Headless.** PNG per selected frame (`write_png`) is the required portable path (no
+  `cv::imshow` / `cv::waitKey`). `try_write_mp4` is best-effort: returns `false` without
+  throwing when there is no `videoio` / codec / backend, and leaves no partial file. Output
+  → `generated/` (git-ignored); no images committed.
+- `VisualizationConfig` gates every overlay independently; all off → `annotate()` returns a
+  plain `cvtColor(GRAY2BGR)` of the input.

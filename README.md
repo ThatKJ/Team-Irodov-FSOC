@@ -155,6 +155,28 @@ For the first 48-hour MVP:
   comparison table (Static P95 0.17°, Sinusoidal-closed P95 0.79° vs Sinusoidal-open P95
   9.81°) + `fsoc_step8_tests`
 
+## Step 9 implemented — engineering camera-view visualization
+
+- new `fsoc_visualization` library — an **observer**: `TrackingVisualizer::annotate()` takes
+  the perception `CV_8UC1` frame **by const& (never modified)** and returns a **new
+  `CV_8UC3` BGR** display frame. The control path keeps running on the original unannotated
+  image; overlay pixels can never reach the detector
+- `SimulationRunner` / `SimulationStepResult` **not changed** — the base frame is
+  reconstructed from `result.observation` via a deterministic `SyntheticCameraRenderer`
+- overlays: centre crosshair (from frame geometry, not hardcoded 320/240), detection marker
+  at `telemetry.detected_*`, centre→detected error vector (shrinks to zero on convergence),
+  `TRACKING` / `TARGET LOST`, `VISIBLE` vs `DETECTED`, SIM/FRAME, PAN/TILT (deg), ANG ERR
+  (deg), ERR PX, CMD rates (deg/s) with amber `RATE LIMIT` from the Step-8 `*_saturated`
+  flags
+- colours: green = tracking, red = lost, amber = saturation, grey = neutral; optional
+  `DETECT ERR` and `TRUTH` square marker are **off by default**
+- headless: PNG per selected frame (required) + optional best-effort `cv::VideoWriter` MP4
+  (graceful `false` when no codec / no `videoio`); output → `generated/step9/` (git-ignored)
+- mandatory non-interference test passed (500 frames with/without annotation → identical
+  `SimulationStepResult` sequence); static story visually verified (frame 0: 4.13° / long
+  vector / 30°/s + `RATE LIMIT` → final: beacon on crosshair / 0.00° / 0°/s)
+- `step9_visualization_smoke` (static / sinusoidal / target-lost) + `fsoc_step9_tests`
+
 ## macOS quick start
 
 ```bash
@@ -172,7 +194,8 @@ ctest --preset debug
 ./build/debug/step5_detector_smoke
 ./build/debug/step6_pid_smoke
 ./build/debug/step7_closed_loop_smoke
-./build/debug/step8_telemetry_smoke   # writes generated/step8_*.csv
+./build/debug/step8_telemetry_smoke      # writes generated/step8_*.csv
+./build/debug/step9_visualization_smoke  # writes generated/step9/*.png (+ optional .mp4)
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

@@ -181,6 +181,37 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(step8_telemetry_smoke PRIVATE fsoc::telemetry)
     fsoc_set_project_warnings(step8_telemetry_smoke)
     fsoc_enable_sanitizers(step8_telemetry_smoke)
+
+    # -----------------------------------------------------------------------
+    # fsoc_visualization — engineering camera-view debug overlay (Step 9).
+    # Observer-only: annotates a COPY; the perception frame is never touched.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_visualization src/visualization.cpp)
+    add_library(fsoc::visualization ALIAS fsoc_visualization)
+    target_include_directories(fsoc_visualization
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_visualization PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_visualization
+        PUBLIC fsoc::simulation fsoc::telemetry opencv_core opencv_imgproc opencv_imgcodecs)
+    # Optional MP4 export — only if this OpenCV build has videoio.
+    if(TARGET opencv_videoio)
+        target_link_libraries(fsoc_visualization PUBLIC opencv_videoio)
+        target_compile_definitions(fsoc_visualization PUBLIC FSOC_HAS_VIDEOIO=1)
+        message(STATUS "FSOC: OpenCV videoio present - Step 9 optional MP4 export enabled")
+    else()
+        message(STATUS "FSOC: OpenCV videoio absent - Step 9 uses the PNG path only")
+    endif()
+    fsoc_set_project_warnings(fsoc_visualization)
+    fsoc_enable_sanitizers(fsoc_visualization)
+
+    add_executable(step9_visualization_smoke apps/step9_visualization_smoke.cpp)
+    target_link_libraries(step9_visualization_smoke PRIVATE fsoc::visualization)
+    fsoc_set_project_warnings(step9_visualization_smoke)
+    fsoc_enable_sanitizers(step9_visualization_smoke)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -234,5 +265,11 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step8_tests)
         fsoc_enable_sanitizers(fsoc_step8_tests)
         add_test(NAME fsoc_step8_tests COMMAND fsoc_step8_tests)
+
+        add_executable(fsoc_step9_tests tests/step9_tests.cpp)
+        target_link_libraries(fsoc_step9_tests PRIVATE fsoc::visualization)
+        fsoc_set_project_warnings(fsoc_step9_tests)
+        fsoc_enable_sanitizers(fsoc_step9_tests)
+        add_test(NAME fsoc_step9_tests COMMAND fsoc_step9_tests)
     endif()
 endif()

@@ -62,7 +62,11 @@
       saturation fractions, rates); wall clock via `std::chrono`, separate from sim dt
 - [x] scenario suite — static / linear / sinusoidal closed / sinusoidal open benchmarks
 - [x] `step8_telemetry_smoke` writes generated/step8_*.csv + prints the comparison table
-- [ ] demo overlay
+- [x] demo overlay — `fsoc_visualization` lib; `TrackingVisualizer` (CV_8UC1 -> annotated CV_8UC3)
+- [x] observer-only, perception frame never touched; mandatory non-interference test passed
+- [x] overlays: crosshair / detection marker / error vector / status / HUD (attitude, errors, rates, SAT)
+- [x] headless PNG sequence (required) + optional best-effort MP4; output -> generated/step9/
+- [x] `step9_visualization_smoke` — static acquisition + sinusoidal + target-lost frames
 - [ ] freeze `v1_baseline`
 
 ## Post-baseline

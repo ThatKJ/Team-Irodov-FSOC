@@ -141,14 +141,28 @@ checks incl. the mandatory non-interference test and hand-computed RMS/mean/max/
 Sinusoidal-closed P95 0.790 deg vs Sinusoidal-open P95 9.81 deg) and ~4700 FPS / ~90x real
 time. Steps 1-7 unchanged.
 
-## Hours 39–43 — Step 9: Visualization
-- OpenCV display
-- center crosshair
-- beacon centroid
-- FOV/tracking state
-- telemetry overlay
+## Hours 39–43 — Step 9: Visualization [DONE]
+- new `fsoc_visualization` library — OBSERVER-only. `TrackingVisualizer::annotate()` takes
+  the perception `CV_8UC1` frame by const& (never modified), returns a NEW `CV_8UC3` BGR
+  display frame. The control path keeps running on the original unannotated image.
+- base frame reconstructed from `result.observation` via a deterministic
+  `SyntheticCameraRenderer` — `SimulationRunner` / `SimulationStepResult` NOT changed
+- overlays: centre crosshair (from frame geometry, not hardcoded), detection marker at
+  `telemetry.detected_*`, centre->detected error vector, TRACKING/TARGET LOST status,
+  VISIBLE vs DETECTED, SIM/FRAME, PAN/TILT (deg), ANG ERR (deg), ERR PX, CMD rates (deg/s)
+  with amber RATE LIMIT when the Step-8 `*_saturated` flags are set
+- colours: green=tracking, red=lost, amber=saturation, grey=neutral; optional DETECT ERR
+  and TRUTH marker are OFF by default (TRUTH drawn as a distinct labelled square)
+- headless: PNG per selected frame (required) + optional best-effort `cv::VideoWriter` MP4
+  (graceful `false` if no codec / no videoio); output -> `generated/step9/` (git-ignored)
 
-Visualization cannot change simulation math.
+Visualization cannot change simulation math. PASSED — `fsoc_step9_tests` green (15 checks
+incl. input byte-immutability and the mandatory non-interference test: 500 frames with/
+without annotation -> identical `SimulationStepResult` sequence, base frame untouched every
+frame). `step9_visualization_smoke` writes 28 PNGs + 2 MP4s; static story visually verified
+(frame 0: 4.13 deg / long vector / 30 deg/s + RATE LIMIT -> final: beacon on crosshair /
+0.00 deg / 0 deg/s), lost frame shows TARGET LOST with no fake marker or vector. Steps 1-8
+unchanged.
 
 ## Hours 43–46 — Step 10: Validation scenarios
 - slow linear

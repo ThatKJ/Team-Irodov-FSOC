@@ -35,6 +35,7 @@ apps/step5_detector_smoke.cpp
 apps/step6_pid_smoke.cpp
 apps/step7_closed_loop_smoke.cpp
 apps/step8_telemetry_smoke.cpp
+apps/step9_visualization_smoke.cpp
 cmake/CompilerWarnings.cmake
 cmake/Sanitizers.cmake
 docs/00_PROJECT_BRIEF.md
@@ -47,6 +48,7 @@ docs/06_DEFINITION_OF_DONE.md
 docs/07_TEST_AND_VALIDATION_PLAN.md
 docs/08_TELEMETRY_SCHEMA.md
 docs/09_FUTURE_ARCHITECTURE.md
+docs/09_VISUALIZATION.md
 docs/10_DEMO_AND_JUDGING_STORY.md
 docs/11_RISK_REGISTER.md
 docs/12_EXPERIMENT_PROTOCOL.md
@@ -71,6 +73,7 @@ include/fsoc/target_state.hpp
 include/fsoc/telemetry.hpp
 include/fsoc/tracking_error.hpp
 include/fsoc/trajectory.hpp
+include/fsoc/visualization.hpp
 prompts/CODE_REVIEW_PROMPT.md
 prompts/DEBUGGING_PROMPT.md
 prompts/HANDOFF_PROMPT.md
@@ -87,6 +90,7 @@ src/simulation_runner.cpp
 src/telemetry.cpp
 src/tracking_error.cpp
 src/trajectory.cpp
+src/visualization.cpp
 tests/step1_tests.cpp
 tests/step2_tests.cpp
 tests/step3_tests.cpp
@@ -95,3 +99,4 @@ tests/step5_tests.cpp
 tests/step6_tests.cpp
 tests/step7_tests.cpp
 tests/step8_tests.cpp
+tests/step9_tests.cpp

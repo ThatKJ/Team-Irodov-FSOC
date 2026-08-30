@@ -239,3 +239,35 @@ Step 8 adds telemetry + benchmarking. Key decisions:
   the step loop only and never influences the simulation. Reported as a distinct number
   (~4700 FPS / ~90x real time) from the 50 Hz simulation rate.
 - `SimulationStepResult` / `SimulationRunner` (Step 7) were NOT modified.
+
+## ADR-012 — Visualization is an observer-only overlay; no runner change (`fsoc_visualization`)
+**Status:** Accepted
+
+Step 9 adds the engineering camera-view visualization. Key decisions:
+
+- **`fsoc_visualization` is a SINK.** It links `fsoc::simulation` + `fsoc::telemetry` +
+  OpenCV core/imgproc/imgcodecs (videoio iff present). `TrackingVisualizer::annotate()`
+  reads a `SimulationStepResult` + `TelemetryRecord` and never calls back into the runner,
+  detector, PID, camera, or trajectory. A run with vs without visualization produces a
+  bit-identical `SimulationStepResult` sequence (`test_visualization_non_interference`).
+- **The perception frame is never contaminated.** `annotate()` takes the `CV_8UC1` frame by
+  const reference and does not modify it (byte-for-byte identical after the call). It
+  returns a fresh `CV_8UC3` BGR image (`cvtColor` into a new buffer, then draws). The
+  detector always runs on the original grayscale frame; overlay pixels cannot reach it.
+- **`SimulationRunner` / `SimulationStepResult` were NOT changed.** The base frame for a
+  result is reconstructed with `SyntheticCameraRenderer{config.renderer}.render(result.observation)`.
+  The renderer is deterministic (Step 4), so this is byte-identical to the frame the runner
+  detected on — zero coupling into control, and no heavy `cv::Mat` in the step result or
+  telemetry (both stay lightweight). This is the minimal-disturbance path among the options
+  in the Step-9 brief.
+- **Detection over truth.** The default view shows the detected centroid + error vector.
+  The exact projection (`DETECT ERR`, `TRUTH` square marker) is off by default; when enabled
+  it is a distinct labelled marker and is never fed into control.
+- **Headless first.** PNG per selected frame (`write_png`) is the required path — no
+  `cv::imshow` / `cv::waitKey`. MP4 (`try_write_mp4` via `cv::VideoWriter`) is optional and
+  best-effort: `videoio` is linked only if the OpenCV build has it (`FSOC_HAS_VIDEOIO`), and
+  a missing codec/backend returns `false` without throwing and leaves no partial file. Step
+  9 is never RED because MP4 is unavailable.
+- Colour semantics are fixed (green = tracking, red = lost, amber = saturation, grey =
+  neutral, cyan = optional truth); HUD is degrees for humans while physics stays radians.
+- No 3D scene / FOV cone / telemetry graphs here — those belong in the future frontend.
