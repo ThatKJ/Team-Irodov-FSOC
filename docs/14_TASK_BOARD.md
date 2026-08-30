@@ -29,9 +29,11 @@
 - [x] CV_8UC1 grayscale, background + sub-pixel Gaussian beacon (sigma in px)
 - [x] edge-safe clipped raster window; non-Visible -> background-only
 - [x] test-only weighted-centroid recovers requested sub-pixel location
-- [ ] threshold detector
-- [ ] centroid
-- [ ] loss state
+- [x] threshold detector — `fsoc_perception` lib, `BeaconDetector` (pixels only, no renderer dep)
+- [x] centroid — 8-connected components + intensity-weighted centroid, `weight=(pixel-threshold)+1`
+- [x] strongest-integrated-signal component selection (deterministic tie-break)
+- [x] loss state — `std::nullopt` on no bright pixels / no component >= min size
+- [x] input validation — empty / non-CV_8UC1 rejected with `std::invalid_argument`
 
 ## Control
 - [ ] PID class

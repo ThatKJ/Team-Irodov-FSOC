@@ -7,7 +7,7 @@ TargetState trajectory.state_at(double sim_time_s);   // { position_m, velocity_
 std::optional<Projection> camera.project(Vec3 target_world_m);
 CameraObservation observe_beacon(const PanTiltCamera&, Vec3 beacon_world_position_m);
 cv::Mat SyntheticCameraRenderer::render(const CameraObservation& observation);  // CV_8UC1
-std::optional<BeaconDetection> detector.detect(const cv::Mat& frame);
+std::optional<BeaconDetection> BeaconDetector::detect(const cv::Mat& frame);    // pixels only
 std::optional<TrackingError> compute_tracking_error(
     const std::optional<BeaconDetection>&, const PanTiltCamera&);
 ControlCommand pid.update(const TrackingError&, double dt_s);
@@ -82,3 +82,33 @@ Layers stay distinct — do not alias them:
 - **Dimensions authority:** the camera. Build `RendererConfig` via
   `renderer_config_for(const CameraConfig&, ...)` so renderer and camera cannot disagree.
 - **No noise this step.** Deterministic: the same observation renders byte-identical frames.
+
+## Baseline beacon detector contract (Step 5, frozen)
+
+- **Module boundary.** The detector lives in `fsoc_perception` (`fsoc/detector.hpp` +
+  `src/detector.cpp`), linking `fsoc::core` + OpenCV `core`/`imgproc`. It **must not**
+  depend on `fsoc_render` and its headers include **neither** `renderer.hpp` **nor**
+  `observation.hpp`. `detect()` takes only `const cv::Mat&` — never `TargetState`,
+  trajectory, `CameraObservation`, the exact projected `ImagePoint`, `TrackingError`, or
+  controller state. It works on any valid `CV_8UC1` frame, not only renderer output.
+- **Input validation.** `detect()` throws `std::invalid_argument` for an empty `cv::Mat`
+  or any type other than `CV_8UC1` (RGB / 16-bit / float frames are rejected, not
+  reinterpreted). `BeaconDetectorConfig::validate()` requires
+  `threshold_intensity ∈ [1, 254]` and `min_bright_pixels ≥ 1`.
+- **Threshold rule.** A pixel is a candidate iff `value >= threshold_intensity`
+  (default 64 — a generic bright cut, not tied to the renderer's background).
+- **Component selection.** 8-connected components on the candidate mask; components with
+  `area < min_bright_pixels` are dropped; the surviving component with the greatest
+  **integrated signal** `Σ weight` wins. Ties resolve to the lowest label (first in raster
+  order) — deterministic.
+- **Centroid math.** Over the winning component's pixels only:
+  `weight(p) = (pixel(p) − threshold_intensity) + 1` (always ≥ 1);
+  `centroid = Σ weight·pos / Σ weight`. Subtracting the threshold (not an assumed
+  background) removes the pedestal so the estimate tracks the true sub-pixel centre;
+  restricting to one component stops a second bright region from pulling it.
+- **Sub-pixel gate.** On clean interior synthetic frames, `|Δx|, |Δy| ≤ 0.15 px`
+  (achieved ≈ 0.02 px). Edge-clipped beacons are found safely but carry a bias.
+- **Lost target.** `std::nullopt` when no pixel passes the threshold or no component is
+  large enough. No `(-1,-1)`, NaN, or zero sentinel — the Step-3 contract holds.
+- **Deterministic.** The same frame yields a bit-identical centroid.
+- `BeaconDetection` stays centroid-only: no fabricated confidence.

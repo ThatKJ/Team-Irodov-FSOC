@@ -31,6 +31,7 @@ apps/step1_math_smoke.cpp
 apps/step2_trajectory_smoke.cpp
 apps/step3_observation_smoke.cpp
 apps/step4_renderer_smoke.cpp
+apps/step5_detector_smoke.cpp
 cmake/CompilerWarnings.cmake
 cmake/Sanitizers.cmake
 docs/00_PROJECT_BRIEF.md
@@ -53,6 +54,7 @@ docs/16_AI_CODING_GUARDRAILS.md
 docs/17_CLAUDE_CODE_USAGE.md
 include/fsoc/camera.hpp
 include/fsoc/config.hpp
+include/fsoc/detector.hpp
 include/fsoc/environment.hpp
 include/fsoc/geometry.hpp
 include/fsoc/image_geometry.hpp
@@ -69,6 +71,7 @@ prompts/HANDOFF_PROMPT.md
 prompts/MASTER_IMPLEMENTATION_PROMPT.md
 prompts/STEP_PROMPTS.md
 src/camera.cpp
+src/detector.cpp
 src/environment.cpp
 src/geometry.cpp
 src/observation.cpp
@@ -79,3 +82,4 @@ tests/step1_tests.cpp
 tests/step2_tests.cpp
 tests/step3_tests.cpp
 tests/step4_tests.cpp
+tests/step5_tests.cpp

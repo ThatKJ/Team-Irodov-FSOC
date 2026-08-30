@@ -44,15 +44,15 @@ fsoc_enable_sanitizers(fsoc_core)
 set(FSOC_OPENCV_AVAILABLE OFF)
 if(NOT FSOC_ENABLE_OPENCV STREQUAL "OFF")
     if(FSOC_ENABLE_OPENCV STREQUAL "ON")
-        find_package(OpenCV REQUIRED COMPONENTS core imgcodecs)
+        find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
     else()
-        find_package(OpenCV QUIET COMPONENTS core imgcodecs)
+        find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
     endif()
     if(OpenCV_FOUND)
         set(FSOC_OPENCV_AVAILABLE ON)
-        message(STATUS "FSOC: OpenCV ${OpenCV_VERSION} found (${OpenCV_DIR}) - building Step 4 renderer")
+        message(STATUS "FSOC: OpenCV ${OpenCV_VERSION} found (${OpenCV_DIR}) - building Step 4 renderer + Step 5 detector")
     else()
-        message(STATUS "FSOC: OpenCV not found - Step 4 renderer disabled. Install it with: brew install opencv")
+        message(STATUS "FSOC: OpenCV not found - Step 4/5 image modules disabled. Install it with: brew install opencv")
     endif()
 endif()
 
@@ -92,6 +92,28 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(step4_renderer_smoke PRIVATE fsoc::render)
     fsoc_set_project_warnings(step4_renderer_smoke)
     fsoc_enable_sanitizers(step4_renderer_smoke)
+
+    # -----------------------------------------------------------------------
+    # fsoc_perception — baseline beacon detector (Step 5)
+    # Depends on fsoc::core + OpenCV (core, imgproc). MUST NOT depend on fsoc_render.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_perception src/detector.cpp)
+    add_library(fsoc::perception ALIAS fsoc_perception)
+    target_include_directories(fsoc_perception
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_perception PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_perception PUBLIC fsoc::core opencv_core opencv_imgproc)
+    fsoc_set_project_warnings(fsoc_perception)
+    fsoc_enable_sanitizers(fsoc_perception)
+
+    add_executable(step5_detector_smoke apps/step5_detector_smoke.cpp)
+    target_link_libraries(step5_detector_smoke PRIVATE fsoc::perception fsoc::render)
+    fsoc_set_project_warnings(step5_detector_smoke)
+    fsoc_enable_sanitizers(step5_detector_smoke)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -121,5 +143,11 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step4_tests)
         fsoc_enable_sanitizers(fsoc_step4_tests)
         add_test(NAME fsoc_step4_tests COMMAND fsoc_step4_tests)
+
+        add_executable(fsoc_step5_tests tests/step5_tests.cpp)
+        target_link_libraries(fsoc_step5_tests PRIVATE fsoc::perception fsoc::render)
+        fsoc_set_project_warnings(fsoc_step5_tests)
+        fsoc_enable_sanitizers(fsoc_step5_tests)
+        add_test(NAME fsoc_step5_tests COMMAND fsoc_step5_tests)
     endif()
 endif()

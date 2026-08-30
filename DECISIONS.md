@@ -99,3 +99,32 @@ first (and, for now, only) public header that `#include`s `<opencv2/core.hpp>`.
 - `cv::Mat` is used directly at the perception boundary; it is not wrapped.
 
 Generated debug PNGs go to `generated/` (git-ignored); no binary images are committed.
+
+## ADR-008 — Baseline detector: `fsoc_perception`, pixels-only, threshold + CC + weighted centroid
+**Status:** Accepted
+
+Step 5 adds the first perception path. Key decisions:
+
+- **Separate `fsoc_perception` library** (`fsoc/detector.hpp` + `src/detector.cpp`), linking
+  `fsoc::core` + OpenCV `core`/`imgproc`. It **must not** depend on `fsoc_render`; the
+  header includes neither `renderer.hpp` nor `observation.hpp`. Dependency direction is
+  `perception -> core + OpenCV` only. The detector consumes `const cv::Mat&` and nothing
+  else, so it works on any valid `CV_8UC1` frame — the renderer is just one source.
+- **Transparent baseline algorithm** (no CNN / feature / template / filter): threshold
+  (`pixel >= threshold_intensity`) -> 8-connected components (OpenCV
+  `connectedComponentsWithStats`) -> drop `area < min_bright_pixels` -> pick the component
+  with the greatest integrated signal -> intensity-weighted centroid over that component.
+- **Connected components (not a single global centroid)** because two bright regions would
+  otherwise be averaged together. `connectedComponentsWithStats` also yields the per-
+  component area for the size gate. Ties on integrated signal resolve to the lowest label
+  (first in raster order) for determinism.
+- **Weight `= (pixel − threshold) + 1`.** Subtracting the config threshold (not an assumed
+  background — the detector must not encode the renderer's background of 5) removes the
+  pedestal so the weighted centroid follows the beacon's true sub-pixel centre; `+1` keeps
+  every in-component pixel contributing so `Σ weight ≥ area ≥ 1`. Measured sub-pixel error
+  on clean interior frames ≈ 0.02 px (gate 0.15).
+- **`BeaconDetection` stays centroid-only** — no fabricated confidence. Diagnostics
+  (integrated signal, area) are computable but not added to the controller-facing type.
+- **Lost target = `std::nullopt`** (Step-3 contract). Frame validation rejects empty and
+  non-`CV_8UC1` inputs with `std::invalid_argument` rather than reinterpreting them.
+- CMake `find_package(OpenCV)` components extended to `core imgproc imgcodecs` (no highgui).

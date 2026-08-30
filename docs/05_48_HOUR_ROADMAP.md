@@ -56,13 +56,24 @@ check, exact-centre symmetry, four-edge clipping, invalid-config rejection, Visi
 finite-point, determinism, Step 1-3 regression), `step4_renderer_smoke` writes
 generated/*.png headlessly. Steps 1-3 unchanged.
 
-## Hours 18–23 — Step 5: Baseline detector
-- intensity threshold
-- connected component/moments or weighted centroid
-- found/not-found state
-- confidence/brightness telemetry
+## Hours 18–23 — Step 5: Baseline detector [DONE]
+- new `fsoc_perception` library (`fsoc::core` + OpenCV core/imgproc); MUST NOT depend
+  on `fsoc_render` — `BeaconDetector::detect(const cv::Mat&)` takes pixels only
+- intensity threshold (`pixel >= threshold_intensity`, default 64)
+- 8-connected components (OpenCV imgproc) -> reject area < `min_bright_pixels`
+  -> select the component with the greatest integrated signal (ties: lowest label)
+- intensity-weighted centroid over that component only:
+  `weight = (pixel - threshold) + 1`, `centroid = sum(w*pos)/sum(w)`
+- found -> `std::optional<BeaconDetection>` (Step-3 type); not found -> `std::nullopt`
+  (no sentinel); no fabricated "confidence"
+- input validation: empty / non-CV_8UC1 frame -> `std::invalid_argument`
+- perception chain check: renderer -> detector -> `compute_tracking_error` reproduces
+  RIGHT+ABOVE -> pan>0, tilt>0
 
-Gate: centroid error is bounded on clean synthetic frames.
+Gate: centroid error is bounded on clean synthetic frames. PASSED — `fsoc_step5_tests`
+green (12 checks); clean interior sub-pixel error ~0.02 px (gate 0.15); the (400.4,179.7)
+manual case recovered (400.410, 179.687) from pixels alone; `step5_detector_smoke` PASS.
+Steps 1-4 unchanged.
 
 ## Hours 23–28 — Step 6: PID control
 - separate PID class

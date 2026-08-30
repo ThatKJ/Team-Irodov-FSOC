@@ -59,6 +59,30 @@ C++20, OpenCV 5.0.0 via Homebrew, /opt/homebrew/lib/cmake/opencv5):
 - ASan/UBSan build: PASS (all 4 test executables + step4 smoke, no findings)
 - Step 1-3 regression: step1_math_smoke still ~0.001 deg; step2 + step3 smokes unchanged
 
+Step 5 - baseline beacon detector (CMake 4.4 / Ninja / Apple clang, C++20,
+OpenCV 5.0.0 via Homebrew):
+- CMake configure: PASS - "... building Step 4 renderer + Step 5 detector"
+  (OpenCV components extended to core imgproc imgcodecs; no highgui)
+- C++ compile/link: PASS, no new project warnings; detector is a new fsoc_perception
+  library linking fsoc::core + opencv_core + opencv_imgproc ONLY (not fsoc_render);
+  detector.hpp includes neither renderer.hpp nor observation.hpp (grep-verified)
+- CTest: PASS (5 executables) - fsoc_step1..5_tests
+- fsoc_step5_tests: PASS (12 checks): centred beacon detected at image centre;
+  sub-pixel recovery (320.4,239.7) and manual (400.4,179.7) within 0.05 px and
+  provably not integer-rounded; error bounded <= 0.15 px/axis across 5 interior
+  positions; quadrant signs of the detected centroid; background-only / speckled /
+  OutsideFieldOfView / BehindCamera frames -> std::nullopt; four near-edge beacons
+  found safely within 1 px; empty / CV_8UC3 / CV_32FC1 / CV_16UC1 frames rejected;
+  invalid config (threshold 0/255, min_bright_pixels 0/-3) rejected; bit-identical
+  re-detection; two-bright-region frames -> strongest integrated signal wins
+  (both orientations); renderer->detector->compute_tracking_error reproduces
+  RIGHT+ABOVE -> pixel x>0,y<0 and pan>0,tilt>0; Step 1-4 regression assertions
+- step5_detector_smoke: PASS headless; Scenario 2 detected (400.410, 179.687) from
+  pixels alone (error norm 0.016 px); Scenario 3 (no target) -> <none>; perception
+  chain check PASS; detector time ~0.6-1.3 ms/frame in Debug (not a gate)
+- ASan/UBSan build: PASS (all 5 test executables + step5 smoke, no findings)
+- Step 1-4 regression: step1_math_smoke still ~0.001 deg; step2/3/4 smokes unchanged
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -68,3 +92,4 @@ macOS target workflow:
   ./build/debug/step2_trajectory_smoke
   ./build/debug/step3_observation_smoke
   ./build/debug/step4_renderer_smoke
+  ./build/debug/step5_detector_smoke

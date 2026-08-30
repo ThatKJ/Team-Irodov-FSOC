@@ -73,6 +73,23 @@ For the first 48-hour MVP:
 - `step4_renderer_smoke` writes `generated/*.png` headlessly + `fsoc_step4_tests`
 - CMake `find_package(OpenCV)` auto-detected (`FSOC_ENABLE_OPENCV=AUTO|ON|OFF`)
 
+## Step 5 implemented — baseline beacon detector
+
+- new `fsoc_perception` library (`fsoc::core` + OpenCV core/imgproc); **does not depend on
+  `fsoc_render`** — `BeaconDetector::detect(const cv::Mat&)` consumes pixels only, never
+  `TargetState` / trajectory / `CameraObservation` / the projected `ImagePoint`
+- transparent pipeline: threshold (`pixel >= threshold_intensity`, default 64) →
+  8-connected components → reject `area < min_bright_pixels` → pick the component with the
+  greatest integrated signal (ties: lowest label) → intensity-weighted centroid
+- centroid weight `= (pixel − threshold) + 1` (no assumed background); recovers the
+  Gaussian's sub-pixel centre to **≈ 0.02 px** on clean interior frames (gate 0.15)
+- found → `std::optional<BeaconDetection>` (Step-3 type); not found → `std::nullopt`
+  (no `(-1,-1)` / NaN / zero sentinel); no fabricated confidence
+- rejects empty / non-`CV_8UC1` frames with `std::invalid_argument`
+- perception chain verified: renderer → detector → `compute_tracking_error` reproduces
+  RIGHT+ABOVE → pan > 0, tilt > 0
+- `step5_detector_smoke` (headless, `std::chrono` timing for curiosity) + `fsoc_step5_tests`
+
 ## macOS quick start
 
 ```bash
@@ -87,6 +104,7 @@ ctest --preset debug
 ./build/debug/step2_trajectory_smoke
 ./build/debug/step3_observation_smoke
 ./build/debug/step4_renderer_smoke
+./build/debug/step5_detector_smoke
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

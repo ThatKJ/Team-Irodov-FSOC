@@ -12,7 +12,7 @@
 - [x] Sinusoidal trajectory
 - [x] Measurement/error data contracts (observation / detection / tracking-error, frozen sign conventions)
 - [x] Synthetic grayscale beacon renderer (OpenCV C++) — CV_8UC1, sub-pixel Gaussian beacon
-- [ ] Threshold + centroid detector
+- [x] Threshold + centroid detector — connected-components + intensity-weighted centroid, ~0.02 px on clean frames
 - [ ] Independent pan/tilt PID controller
 - [ ] Closed-loop SimulationRunner
 - [ ] Telemetry logger
