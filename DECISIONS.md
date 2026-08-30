@@ -72,3 +72,30 @@ never receives `TargetState` and the future controller never receives world XYZ.
 
 No Step 1 / Step 2 source changed. `ScenarioConfig` (trajectory mode, `duration_s`, fixed
 `timestep_s`) is added as a pure data contract for the Step 7 runner; it holds no logic.
+
+## ADR-007 — OpenCV enters only through a separate `fsoc_render` library
+**Status:** Accepted
+
+Step 4 introduces OpenCV (first allowed by CLAUDE.md rule 4). It is confined to one
+translation unit pair, `include/fsoc/renderer.hpp` + `src/renderer.cpp`, compiled into a
+**separate `fsoc_render` library** that links `fsoc::core` + OpenCV. `fsoc_core` never
+links or includes OpenCV; the pure-math headers stay OpenCV-free. `renderer.hpp` is the
+first (and, for now, only) public header that `#include`s `<opencv2/core.hpp>`.
+
+- **Build discovery:** `FSOC_ENABLE_OPENCV` is tri-state `AUTO` (default) | `ON` | `OFF`.
+  `AUTO` runs `find_package(OpenCV QUIET COMPONENTS core imgcodecs)` and builds the Step 4
+  targets only if found, otherwise prints `brew install opencv` and continues (Steps 1-3
+  stay buildable/green without OpenCV). `ON` makes it `REQUIRED`. No Homebrew absolute
+  paths anywhere — pure CMake package discovery.
+- **Renderer ownership limits:** the renderer owns pixels only. It consumes a
+  `CameraObservation` and nothing else — no `TargetState`, world coordinates, trajectory,
+  camera pose, control, or estimation. OpenCV owns no simulation state.
+- **Image format:** `CV_8UC1`; background 5 counts; beacon = analytic 2-D Gaussian, peak
+  255, `sigma` in pixels, evaluated at the true sub-pixel `ImagePoint` (never pre-rounded);
+  clipped raster window for edge safety; non-`Visible` observation renders background-only.
+- **No sensor noise in Step 4** — deterministic pixels are validated before disturbances;
+  any future noise must be optional and explicitly seeded.
+- **Dimensions authority is the camera** via `renderer_config_for(const CameraConfig&)`.
+- `cv::Mat` is used directly at the perception boundary; it is not wrapped.
+
+Generated debug PNGs go to `generated/` (git-ignored); no binary images are committed.

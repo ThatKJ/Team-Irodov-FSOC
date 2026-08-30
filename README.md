@@ -58,11 +58,27 @@ For the first 48-hour MVP:
   `fsoc_step3_tests` (all four quadrants, pinhole match, regressions)
 - no OpenCV, no detector algorithm, no controller
 
+## Step 4 implemented — synthetic virtual-camera image renderer
+
+- first OpenCV use, isolated in a separate `fsoc_render` library; `fsoc_core` and all
+  pure-math headers stay OpenCV-free
+- `SyntheticCameraRenderer::render(const CameraObservation&) -> cv::Mat` (`CV_8UC1`)
+- uniform dark background (default 5 counts) + analytic 2-D Gaussian beacon
+  (peak 255, `sigma` in **pixels**), clamped to `[0,255]`
+- **true sub-pixel** beacon centre — the fractional `ImagePoint` is never rounded before
+  the Gaussian is evaluated, so a weighted centroid recovers it
+- edge-safe: the Gaussian is rasterised in a window clipped to the image
+- `OutsideFieldOfView` / `BehindCamera` → background-only frame (no fake beacon)
+- no sensor noise this step; the same observation renders byte-identical frames
+- `step4_renderer_smoke` writes `generated/*.png` headlessly + `fsoc_step4_tests`
+- CMake `find_package(OpenCV)` auto-detected (`FSOC_ENABLE_OPENCV=AUTO|ON|OFF`)
+
 ## macOS quick start
 
 ```bash
 xcode-select --install      # only if Command Line Tools are missing
 brew install cmake ninja
+brew install opencv          # required from Step 4 onward
 
 cmake --preset debug
 cmake --build --preset debug
@@ -70,13 +86,12 @@ ctest --preset debug
 ./build/debug/step1_math_smoke
 ./build/debug/step2_trajectory_smoke
 ./build/debug/step3_observation_smoke
+./build/debug/step4_renderer_smoke
 ```
 
-Do **not** install OpenCV until the roadmap reaches the synthetic image/tracking step. When needed:
-
-```bash
-brew install opencv
-```
+Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice
+and skips the Step 4 renderer target only. Install it with `brew install opencv` and
+reconfigure — no Homebrew paths are hardcoded.
 
 ## Repository layout
 

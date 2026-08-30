@@ -3,7 +3,12 @@ project(fsoc_mvp VERSION 0.1.0 LANGUAGES CXX)
 
 option(FSOC_BUILD_TESTS "Build unit tests" ON)
 option(FSOC_ENABLE_SANITIZERS "Enable Address/Undefined sanitizers in Debug" OFF)
-option(FSOC_ENABLE_OPENCV "Enable OpenCV-dependent modules when they are added" OFF)
+
+# OpenCV powers only the image/perception boundary (Step 4+). Pure math/core stays
+# OpenCV-free. AUTO builds those targets when OpenCV is discoverable and silently
+# skips them otherwise; ON makes OpenCV mandatory; OFF never looks for it.
+set(FSOC_ENABLE_OPENCV "AUTO" CACHE STRING "OpenCV renderer: AUTO | ON | OFF")
+set_property(CACHE FSOC_ENABLE_OPENCV PROPERTY STRINGS AUTO ON OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,10 +38,22 @@ target_compile_features(fsoc_core PUBLIC cxx_std_20)
 fsoc_set_project_warnings(fsoc_core)
 fsoc_enable_sanitizers(fsoc_core)
 
-if(FSOC_ENABLE_OPENCV)
-    find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc highgui)
-    target_link_libraries(fsoc_core PUBLIC ${OpenCV_LIBS})
-    target_compile_definitions(fsoc_core PUBLIC FSOC_HAS_OPENCV=1)
+# ---------------------------------------------------------------------------
+# OpenCV discovery (image/perception boundary only — never linked into fsoc_core)
+# ---------------------------------------------------------------------------
+set(FSOC_OPENCV_AVAILABLE OFF)
+if(NOT FSOC_ENABLE_OPENCV STREQUAL "OFF")
+    if(FSOC_ENABLE_OPENCV STREQUAL "ON")
+        find_package(OpenCV REQUIRED COMPONENTS core imgcodecs)
+    else()
+        find_package(OpenCV QUIET COMPONENTS core imgcodecs)
+    endif()
+    if(OpenCV_FOUND)
+        set(FSOC_OPENCV_AVAILABLE ON)
+        message(STATUS "FSOC: OpenCV ${OpenCV_VERSION} found (${OpenCV_DIR}) - building Step 4 renderer")
+    else()
+        message(STATUS "FSOC: OpenCV not found - Step 4 renderer disabled. Install it with: brew install opencv")
+    endif()
 endif()
 
 add_executable(step1_math_smoke apps/step1_math_smoke.cpp)
@@ -53,6 +70,29 @@ add_executable(step3_observation_smoke apps/step3_observation_smoke.cpp)
 target_link_libraries(step3_observation_smoke PRIVATE fsoc::core)
 fsoc_set_project_warnings(step3_observation_smoke)
 fsoc_enable_sanitizers(step3_observation_smoke)
+
+# ---------------------------------------------------------------------------
+# fsoc_render — synthetic image renderer (OpenCV-dependent; Step 4)
+# ---------------------------------------------------------------------------
+if(FSOC_OPENCV_AVAILABLE)
+    add_library(fsoc_render src/renderer.cpp)
+    add_library(fsoc::render ALIAS fsoc_render)
+    target_include_directories(fsoc_render
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_render PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_render PUBLIC fsoc::core ${OpenCV_LIBS})
+    fsoc_set_project_warnings(fsoc_render)
+    fsoc_enable_sanitizers(fsoc_render)
+
+    add_executable(step4_renderer_smoke apps/step4_renderer_smoke.cpp)
+    target_link_libraries(step4_renderer_smoke PRIVATE fsoc::render)
+    fsoc_set_project_warnings(step4_renderer_smoke)
+    fsoc_enable_sanitizers(step4_renderer_smoke)
+endif()
 
 if(FSOC_BUILD_TESTS)
     enable_testing()
@@ -74,4 +114,12 @@ if(FSOC_BUILD_TESTS)
     fsoc_set_project_warnings(fsoc_step3_tests)
     fsoc_enable_sanitizers(fsoc_step3_tests)
     add_test(NAME fsoc_step3_tests COMMAND fsoc_step3_tests)
+
+    if(FSOC_OPENCV_AVAILABLE)
+        add_executable(fsoc_step4_tests tests/step4_tests.cpp)
+        target_link_libraries(fsoc_step4_tests PRIVATE fsoc::render)
+        fsoc_set_project_warnings(fsoc_step4_tests)
+        fsoc_enable_sanitizers(fsoc_step4_tests)
+        add_test(NAME fsoc_step4_tests COMMAND fsoc_step4_tests)
+    endif()
 endif()

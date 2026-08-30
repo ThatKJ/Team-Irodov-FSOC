@@ -37,10 +37,34 @@ Apple clang, C++20):
 - ASan/UBSan build: PASS (all 3 test executables + step3 smoke, no findings)
 - Step 1 + Step 2 regression: step1_math_smoke still ~0.001 deg, step2 smoke unchanged
 
+Step 4 - synthetic virtual-camera image renderer (CMake 4.4 / Ninja / Apple clang,
+C++20, OpenCV 5.0.0 via Homebrew, /opt/homebrew/lib/cmake/opencv5):
+- CMake configure: PASS - "FSOC: OpenCV 5.0.0 found - building Step 4 renderer"
+  (FSOC_ENABLE_OPENCV=AUTO; Steps 1-3 also configure/build/pass with OpenCV absent)
+- C++ compile/link: PASS, no new project warnings (same flag set as Steps 2-3);
+  OpenCV confined to the fsoc_render library, fsoc_core stays OpenCV-free
+- CTest: PASS (4 executables) - fsoc_step1_tests + fsoc_step2_tests + fsoc_step3_tests
+  + fsoc_step4_tests
+- fsoc_step4_tests: PASS (11 checks): frame dims 640x480 + CV_8UC1; background-only
+  images at level 5 for OutsideFieldOfView and BehindCamera; visible beacon brighter
+  than background; peak + weighted centroid near projected point; sub-pixel recovery
+  (320.4,239.7) and manual check (400.4,179.7) both within 0.1 px and provably not
+  rounded to integer; exact-centre beacon renders symmetrically; four-edge + FOV-edge
+  + fully-off-image clipping is safe (no overrun); invalid RendererConfig rejected
+  (w<=0, h<=0, sigma<=0, non-finite sigma, window<1); Visible without a finite image
+  point rejected; byte-identical re-render; Step 1-3 regression assertions
+- step4_renderer_smoke: PASS headless; sub-pixel scenario recovered (400.403, 179.703)
+  vs requested (400.400, 179.700) - true sub-pixel, not (400,180); wrote
+  generated/step4_center.png, step4_subpixel.png, step4_no_target.png (640x480 8-bit)
+- ASan/UBSan build: PASS (all 4 test executables + step4 smoke, no findings)
+- Step 1-3 regression: step1_math_smoke still ~0.001 deg; step2 + step3 smokes unchanged
+
 macOS target workflow:
+  brew install opencv          # required from Step 4 onward
   cmake --preset debug
   cmake --build --preset debug
   ctest --preset debug
   ./build/debug/step1_math_smoke
   ./build/debug/step2_trajectory_smoke
   ./build/debug/step3_observation_smoke
+  ./build/debug/step4_renderer_smoke

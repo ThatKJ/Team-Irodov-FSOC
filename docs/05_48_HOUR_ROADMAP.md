@@ -39,13 +39,22 @@ non-finite/invalid rejection + Step 1/2 regression), `step3_observation_smoke` m
 verifies the (320,240)/(400,180) critical scenario -> pan RIGHT + tilt UP. Steps 1 and 2
 unchanged.
 
-## Hours 13–18 — Step 4: Synthetic image renderer
-- add OpenCV C++
-- grayscale image
-- sub/resolved bright beacon approximation
-- background + optional simple Gaussian sensor noise
+## Hours 13–18 — Step 4: Synthetic image renderer [DONE]
+- OpenCV C++ introduced, isolated in a separate `fsoc_render` library
+  (`fsoc_core` stays OpenCV-free); CMake auto-detects OpenCV, `brew install opencv`
+- `SyntheticCameraRenderer` : `CameraObservation -> cv::Mat` (CV_8UC1)
+- background (default 5 counts) + analytic 2-D Gaussian beacon, peak 255, sigma in px
+- true sub-pixel beacon centre (evaluated at the fractional ImagePoint, never rounded)
+- local clipped raster window -> safe at image edges, no overrun
+- non-`Visible` observation -> background-only frame (no fake beacon)
+- no random noise this step (deterministic pixels first)
 
 Gate: images can be generated headlessly and target pixels match projection coordinates.
+PASSED — `fsoc_step4_tests` green (11 checks: dims/type, background level, brightness,
+peak+weighted centroid near projection, sub-pixel recovery incl. the (400.4,179.7) manual
+check, exact-centre symmetry, four-edge clipping, invalid-config rejection, Visible-needs-
+finite-point, determinism, Step 1-3 regression), `step4_renderer_smoke` writes
+generated/*.png headlessly. Steps 1-3 unchanged.
 
 ## Hours 18–23 — Step 5: Baseline detector
 - intensity threshold

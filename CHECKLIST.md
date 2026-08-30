@@ -11,7 +11,7 @@
 - [x] Trajectory interface + stationary + linear trajectory
 - [x] Sinusoidal trajectory
 - [x] Measurement/error data contracts (observation / detection / tracking-error, frozen sign conventions)
-- [ ] Synthetic grayscale beacon renderer (OpenCV C++)
+- [x] Synthetic grayscale beacon renderer (OpenCV C++) — CV_8UC1, sub-pixel Gaussian beacon
 - [ ] Threshold + centroid detector
 - [ ] Independent pan/tilt PID controller
 - [ ] Closed-loop SimulationRunner

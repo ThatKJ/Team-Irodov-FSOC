@@ -1,6 +1,7 @@
 build/
 cmake-build-*/
 out/
+generated/
 .DS_Store
 .vscode/*.log
 compile_commands.json

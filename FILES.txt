@@ -30,6 +30,7 @@ VALIDATION.txt
 apps/step1_math_smoke.cpp
 apps/step2_trajectory_smoke.cpp
 apps/step3_observation_smoke.cpp
+apps/step4_renderer_smoke.cpp
 cmake/CompilerWarnings.cmake
 cmake/Sanitizers.cmake
 docs/00_PROJECT_BRIEF.md
@@ -57,6 +58,7 @@ include/fsoc/geometry.hpp
 include/fsoc/image_geometry.hpp
 include/fsoc/measurement.hpp
 include/fsoc/observation.hpp
+include/fsoc/renderer.hpp
 include/fsoc/scenario.hpp
 include/fsoc/target_state.hpp
 include/fsoc/tracking_error.hpp
@@ -70,8 +72,10 @@ src/camera.cpp
 src/environment.cpp
 src/geometry.cpp
 src/observation.cpp
+src/renderer.cpp
 src/tracking_error.cpp
 src/trajectory.cpp
 tests/step1_tests.cpp
 tests/step2_tests.cpp
 tests/step3_tests.cpp
+tests/step4_tests.cpp

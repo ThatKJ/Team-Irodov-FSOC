@@ -1,4 +1,4 @@
-.PHONY: configure build test run run-step2 run-step3 clean format
+.PHONY: configure build test run run-step2 run-step3 run-step4 clean format
 
 configure:
 	cmake --preset debug
@@ -17,6 +17,9 @@ run-step2: build
 
 run-step3: build
 	./build/debug/step3_observation_smoke
+
+run-step4: build
+	./build/debug/step4_renderer_smoke
 
 format:
 	find include src apps tests -type f \( -name '*.hpp' -o -name '*.cpp' \) -print0 | xargs -0 clang-format -i

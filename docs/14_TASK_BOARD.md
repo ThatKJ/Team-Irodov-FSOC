@@ -25,7 +25,10 @@
 - [x] `ScenarioConfig` data contract (mode, duration_s, fixed timestep_s)
 
 ## Perception baseline
-- [ ] OpenCV renderer
+- [x] OpenCV renderer — `fsoc_render` lib (isolated), `SyntheticCameraRenderer`
+- [x] CV_8UC1 grayscale, background + sub-pixel Gaussian beacon (sigma in px)
+- [x] edge-safe clipped raster window; non-Visible -> background-only
+- [x] test-only weighted-centroid recovers requested sub-pixel location
 - [ ] threshold detector
 - [ ] centroid
 - [ ] loss state

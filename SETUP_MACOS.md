@@ -40,13 +40,28 @@ Expected test result:
 brew install clang-format llvm
 ```
 
-## 5. OpenCV — only when Step 4/5 begins
+## 5. OpenCV — required from Step 4 onward
 
 ```bash
 brew install opencv
 ```
 
-Do not couple OpenCV windows/rendering to camera physics or PID logic. OpenCV is an observation/rendering adapter.
+The build uses `find_package(OpenCV)` (components `core`, `imgcodecs`) — no Homebrew
+paths are hardcoded. `FSOC_ENABLE_OPENCV` is `AUTO` by default: Steps 1–3 still configure,
+build, and pass without OpenCV, and CMake prints a one-line notice if it is missing. Set
+`-DFSOC_ENABLE_OPENCV=ON` to make it mandatory, `OFF` to never look for it.
+
+After installing, run the normal workflow:
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+ctest --preset debug
+./build/debug/step4_renderer_smoke      # writes generated/*.png headlessly
+```
+
+Do not couple OpenCV windows/rendering to camera physics or PID logic. OpenCV lives only
+in the `fsoc_render` library (the image/perception boundary); `fsoc_core` stays OpenCV-free.
 
 ## 6. No Python setup
 
