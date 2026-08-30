@@ -10,9 +10,9 @@
 - [x] Terminal math smoke test
 - [x] Trajectory interface + stationary + linear trajectory
 - [x] Sinusoidal trajectory
+- [x] Measurement/error data contracts (observation / detection / tracking-error, frozen sign conventions)
 - [ ] Synthetic grayscale beacon renderer (OpenCV C++)
 - [ ] Threshold + centroid detector
-- [ ] Measurement/error data contracts
 - [ ] Independent pan/tilt PID controller
 - [ ] Closed-loop SimulationRunner
 - [ ] Telemetry logger

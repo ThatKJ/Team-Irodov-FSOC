@@ -18,6 +18,8 @@ add_library(fsoc_core
     src/camera.cpp
     src/environment.cpp
     src/trajectory.cpp
+    src/observation.cpp
+    src/tracking_error.cpp
 )
 add_library(fsoc::core ALIAS fsoc_core)
 
@@ -47,6 +49,11 @@ target_link_libraries(step2_trajectory_smoke PRIVATE fsoc::core)
 fsoc_set_project_warnings(step2_trajectory_smoke)
 fsoc_enable_sanitizers(step2_trajectory_smoke)
 
+add_executable(step3_observation_smoke apps/step3_observation_smoke.cpp)
+target_link_libraries(step3_observation_smoke PRIVATE fsoc::core)
+fsoc_set_project_warnings(step3_observation_smoke)
+fsoc_enable_sanitizers(step3_observation_smoke)
+
 if(FSOC_BUILD_TESTS)
     enable_testing()
 
@@ -61,4 +68,10 @@ if(FSOC_BUILD_TESTS)
     fsoc_set_project_warnings(fsoc_step2_tests)
     fsoc_enable_sanitizers(fsoc_step2_tests)
     add_test(NAME fsoc_step2_tests COMMAND fsoc_step2_tests)
+
+    add_executable(fsoc_step3_tests tests/step3_tests.cpp)
+    target_link_libraries(fsoc_step3_tests PRIVATE fsoc::core)
+    fsoc_set_project_warnings(fsoc_step3_tests)
+    fsoc_enable_sanitizers(fsoc_step3_tests)
+    add_test(NAME fsoc_step3_tests COMMAND fsoc_step3_tests)
 endif()

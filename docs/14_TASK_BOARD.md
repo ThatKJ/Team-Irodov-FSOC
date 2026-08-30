@@ -15,6 +15,15 @@
 - [x] sinusoidal trajectory with analytic velocity
 - [x] deterministic analytic tests + smoke
 
+## Observation / measurement contracts
+- [x] `ImagePoint` + frozen image convention (origin top-left, +x right, +y down)
+- [x] `CameraObservation` / `ObservationStatus` (Visible / OutsideFieldOfView / BehindCamera)
+- [x] `observe_beacon()` reuses `PanTiltCamera::project()` (no duplicated projection math)
+- [x] `BeaconDetection` (centroid only; no fabricated confidence)
+- [x] `PixelError` / `AngularError` / `TrackingError` with frozen sign conventions
+- [x] `compute_tracking_error()` — `std::optional` in / out, non-finite rejected
+- [x] `ScenarioConfig` data contract (mode, duration_s, fixed timestep_s)
+
 ## Perception baseline
 - [ ] OpenCV renderer
 - [ ] threshold detector

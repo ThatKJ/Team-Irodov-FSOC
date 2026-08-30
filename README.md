@@ -40,6 +40,24 @@ For the first 48-hour MVP:
 - `step2_trajectory_smoke` + deterministic analytic CTest suite (`fsoc_step2_tests`)
 - no coupling to camera / perception / control
 
+## Step 3 implemented — observation / measurement / tracking-error contracts
+
+- strongly typed layers kept distinct: `TargetState` (truth) → `CameraObservation` /
+  `Projection` (exact projection) → `BeaconDetection` (image estimate) → `TrackingError`
+  (controller-facing)
+- `ObservationStatus` = `Visible` / `OutsideFieldOfView` / `BehindCamera`;
+  `observe_beacon()` reuses `PanTiltCamera::project()` — no duplicated projection math
+- frozen image convention: origin top-left, `+x_px` right, `+y_px` down;
+  centre `cx = W/2.0`, `cy = H/2.0` owned by the camera
+- frozen sign convention: pixel `error_x>0` = RIGHT, `error_y>0` = BELOW;
+  angular `pan_rad>0` = command pan right, `tilt_rad>0` = command tilt up
+- `compute_tracking_error(std::optional<BeaconDetection>, PanTiltCamera)` — `optional`
+  in / out, non-finite centroid rejected, reuses `pixel_error_to_angles`
+- target-lost = empty `std::optional` only (no `(-1,-1)` / NaN / zero sentinels)
+- `step3_observation_smoke` (machine-checks the critical (400,180) scenario) +
+  `fsoc_step3_tests` (all four quadrants, pinhole match, regressions)
+- no OpenCV, no detector algorithm, no controller
+
 ## macOS quick start
 
 ```bash
@@ -51,6 +69,7 @@ cmake --build --preset debug
 ctest --preset debug
 ./build/debug/step1_math_smoke
 ./build/debug/step2_trajectory_smoke
+./build/debug/step3_observation_smoke
 ```
 
 Do **not** install OpenCV until the roadmap reaches the synthetic image/tracking step. When needed:

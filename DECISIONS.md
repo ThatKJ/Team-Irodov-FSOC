@@ -44,3 +44,31 @@ Input-validation policy (fail fast, never emit NaN):
 
 Sinusoidal frequency is specified in hertz and converted once as `omega = 2*pi*f`;
 velocity is the exact analytic derivative `A*omega*cos(omega*t + phi)`.
+
+## ADR-006 — Observation / measurement / tracking-error contracts
+**Status:** Accepted
+
+Four distinct types, never aliased into one: `TargetState` (truth), `Projection` /
+`CameraObservation` (exact camera projection), `BeaconDetection` (image-pixel estimate),
+`TrackingError` (controller-facing error). Dependencies point one way; the future detector
+never receives `TargetState` and the future controller never receives world XYZ.
+
+- **Image convention (frozen):** origin top-left, `+x_px` right, `+y_px` down — exactly the
+  convention already in `PanTiltCamera::project()`. Image centre is `width_px/2.0`,
+  `height_px/2.0`, owned solely by `PanTiltCamera::cx_px()/cy_px()`; no module redefines it.
+- **Visibility is a 3-state enum** (`Visible`, `OutsideFieldOfView`, `BehindCamera`), not a
+  bare optional, because telemetry and loss handling must tell the two failure modes apart.
+  Depth test precedes FOV test.
+- **Lost target = empty `std::optional` only.** No `(-1,-1)`, NaN, or zero sentinels. The
+  `optional`-in / `optional`-out shape of `compute_tracking_error` makes computing an error
+  from a lost target hard to do by accident.
+- **Sign conventions (frozen, quadrant-tested):** pixel `error_x>0` = beacon right,
+  `error_y>0` = beacon below; angular `pan_rad>0` = command pan right, `tilt_rad>0` =
+  command tilt up. Angular conversion reuses `PanTiltCamera::pixel_error_to_angles`; the
+  pinhole and pixel->angle equations are not duplicated anywhere.
+- **Validation:** non-finite detection centroid throws `std::invalid_argument`; invalid
+  image dimensions rejected by existing `CameraConfig::validate()`.
+- `TrackingError` is pose-independent (pure image-plane quantity).
+
+No Step 1 / Step 2 source changed. `ScenarioConfig` (trajectory mode, `duration_s`, fixed
+`timestep_s`) is added as a pure data contract for the Step 7 runner; it holds no logic.

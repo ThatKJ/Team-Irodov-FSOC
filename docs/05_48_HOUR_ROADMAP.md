@@ -23,13 +23,21 @@ Gate: sampled positions/velocities agree with analytic expectations. PASSED —
 `fsoc_step2_tests` green, `step2_trajectory_smoke` matches hand computation, Step 1
 unchanged (final pointing error still ~0.001 deg).
 
-## Hours 8–13 — Step 3: Observation contract
-- define projection/measurement structs
-- lost-target semantics
-- pixel/angular error conventions
-- scenario configuration
+## Hours 8–13 — Step 3: Observation contract [DONE]
+- projection/measurement structs: `ImagePoint`, `CameraObservation` + `ObservationStatus`
+  (Visible / OutsideFieldOfView / BehindCamera), `BeaconDetection`, `PixelError`,
+  `AngularError`, `TrackingError`
+- lost-target semantics: `std::optional` everywhere, no sentinel coordinates
+- pixel/angular error sign conventions frozen (see docs/04) and quadrant-tested
+- `compute_tracking_error(std::optional<BeaconDetection>, PanTiltCamera)` reuses the
+  existing exact `PanTiltCamera::pixel_error_to_angles` — no duplicated math
+- `ScenarioConfig` (trajectory mode, duration_s, fixed timestep_s) data contract only
 
-Gate: no controller exists yet; interfaces compile and tests cover signs/units.
+Gate: no controller exists yet; interfaces compile and tests cover signs/units. PASSED —
+`fsoc_step3_tests` green (15 checks, all four quadrants + pinhole match + lost-target +
+non-finite/invalid rejection + Step 1/2 regression), `step3_observation_smoke` machine-
+verifies the (320,240)/(400,180) critical scenario -> pan RIGHT + tilt UP. Steps 1 and 2
+unchanged.
 
 ## Hours 13–18 — Step 4: Synthetic image renderer
 - add OpenCV C++
