@@ -1,0 +1,26 @@
+# 48-Hour MVP Checklist — C++20
+
+- [x] CMake/C++20 skeleton
+- [x] Frozen coordinate convention
+- [x] Vec3 geometry primitives
+- [x] Virtual pan/tilt camera
+- [x] Narrow FOV + pinhole projection
+- [x] Velocity limits + tilt stops
+- [x] Step-1 unit checks
+- [x] Terminal math smoke test
+- [ ] Trajectory interface + linear trajectory
+- [ ] Sinusoidal trajectory
+- [ ] Synthetic grayscale beacon renderer (OpenCV C++)
+- [ ] Threshold + centroid detector
+- [ ] Measurement/error data contracts
+- [ ] Independent pan/tilt PID controller
+- [ ] Closed-loop SimulationRunner
+- [ ] Telemetry logger
+- [ ] FPS and timing measurement
+- [ ] Target-loss behavior
+- [ ] Rate saturation telemetry
+- [ ] Parameterized benchmark scenarios
+- [ ] OpenCV visualization
+- [ ] Plot/export telemetry for judging
+- [ ] Baseline acceptance metrics met
+- [ ] Freeze `v1_baseline`

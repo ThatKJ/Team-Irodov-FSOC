@@ -1,0 +1,10 @@
+build/
+cmake-build-*/
+out/
+.DS_Store
+.vscode/*.log
+compile_commands.json
+*.dSYM/
+*.profraw
+*.gcda
+*.gcno

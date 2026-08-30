@@ -1,0 +1,14 @@
+SIH26169 FSOC C++ starter validation
+
+Validated in packaging environment with CMake 3.31 / C++20:
+- CMake configure: PASS
+- C++ compile/link: PASS
+- CTest: PASS (1 executable, 12 Step-1 checks)
+- step1_math_smoke: PASS
+- final terminal pointing error: approximately 0.001 deg pan / 0.001 deg tilt
+
+macOS target workflow:
+  cmake --preset debug
+  cmake --build --preset debug
+  ctest --preset debug
+  ./build/debug/step1_math_smoke
