@@ -137,6 +137,31 @@ OpenCV 5.0.0):
 - ASan/UBSan build: PASS (all 7 test executables + step7 smoke, no findings)
 - Step 1-6 regression: step1_math_smoke still ~0.001 deg; step2-6 smokes unchanged
 
+Step 8 - telemetry + benchmarking (CMake 4.4 / Ninja / Apple clang, C++20, OpenCV 5.0.0):
+- CMake configure/build: PASS, no new project warnings; new fsoc_telemetry library
+  links fsoc::simulation ONLY. Observer-only: telemetry consumes SimulationStepResult;
+  Step 7 SimulationRunner / SimulationStepResult NOT modified.
+- CTest: PASS (8 executables) - fsoc_step1..8_tests
+- fsoc_step8_tests: PASS (14 checks): TelemetryRecord copies every scalar/optional field;
+  optionals absent on target-loss, present when detected/tracking; saturation flags
+  (flat-out slew) correct; CSV header deterministic (27 columns) and == column_names();
+  every record line has 27 comma fields incl. empty ones for absent optionals; multiple
+  records; benchmark counts + detection_fraction; hand-computed RMS = sqrt(0.0011),
+  mean = 0.03, max = 0.05, final != max case, P95 nearest-rank (N=5 -> idx 4, N=7 ->
+  idx 6); hand-computed pixel RMS = sqrt(58.8); saturation fractions 2/6, 2/6, 1/6;
+  processing_fps = frames/wall and error metrics identical for wall=0.25 vs 4.0;
+  MANDATORY non-interference: run A (no logger) vs run B (CSV logger interleaved over
+  600 frames) -> identical SimulationStepResult sequences; BenchmarkMetrics == Step-7
+  evaluate() on a real run; Step 1-7 regression assertions
+- step8_telemetry_smoke: PASS - wrote generated/step8_{static,linear,sinusoidal,
+  open_loop}.csv (250/500/1000/1000 records, 27 cols); benchmark table Static
+  RMS 0.420 deg / P95 0.167 deg, Linear RMS 0.391 / P95 0.103, Sinusoidal-Closed
+  RMS 0.546 / P95 0.790, Sinusoidal-Open RMS 6.455 / P95 9.811; OPEN vs CLOSED
+  detection 57.4% -> 100.0%, RMS 6.45 -> 0.55 deg (11.8x); Simulation 50 Hz vs
+  Processing ~4700 FPS (~90x real time, ~215 us/frame)
+- ASan/UBSan build: PASS (all 8 test executables + step7/step8 smokes, no findings)
+- Step 1-7 regression: step1_math_smoke still ~0.001 deg; step2-7 smokes unchanged
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -149,3 +174,4 @@ macOS target workflow:
   ./build/debug/step5_detector_smoke
   ./build/debug/step6_pid_smoke
   ./build/debug/step7_closed_loop_smoke
+  ./build/debug/step8_telemetry_smoke

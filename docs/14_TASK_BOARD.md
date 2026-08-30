@@ -56,9 +56,12 @@
 - [x] empirically-tuned MVP baseline gains (kp=12, ki=0, kd=0)
 
 ## Evidence
-- [ ] telemetry CSV
-- [ ] performance metrics
-- [ ] scenario suite
+- [x] telemetry CSV — `fsoc_telemetry` lib; `TelemetryRecord` (27 cols) + `CsvTelemetryLogger`
+- [x] observer-only, non-interference proven (with/without telemetry -> identical results)
+- [x] performance metrics — `BenchmarkMetrics` (RMS/mean/max/final/P95 angular, pixel error,
+      saturation fractions, rates); wall clock via `std::chrono`, separate from sim dt
+- [x] scenario suite — static / linear / sinusoidal closed / sinusoidal open benchmarks
+- [x] `step8_telemetry_smoke` writes generated/step8_*.csv + prints the comparison table
 - [ ] demo overlay
 - [ ] freeze `v1_baseline`
 

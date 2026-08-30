@@ -15,11 +15,11 @@
 - [x] Threshold + centroid detector — connected-components + intensity-weighted centroid, ~0.02 px on clean frames
 - [x] Independent pan/tilt PID controller — `fsoc_control` (OpenCV-free), angular error -> rate command, anti-windup, reset
 - [x] Closed-loop SimulationRunner — `fsoc_simulation`, deterministic fixed-step, pixel-only feedback, static acq final error ~0 deg
-- [ ] Telemetry logger
-- [ ] FPS and timing measurement
+- [x] Telemetry logger — `fsoc_telemetry`, observer-only `TelemetryRecord` + synchronous `CsvTelemetryLogger` (27 cols)
+- [x] FPS and timing measurement — `std::chrono` wall clock, separate from the fixed sim dt (~4700 FPS, ~90x real time)
 - [x] Target-loss behavior — no detection -> PID reset + zero command + camera holds (no search mode)
-- [ ] Rate saturation telemetry
-- [ ] Parameterized benchmark scenarios
+- [x] Rate saturation telemetry — `pan_saturated` / `tilt_saturated` + `command_saturation_fraction` benchmark metric
+- [x] Parameterized benchmark scenarios — static / linear / sinusoidal closed / sinusoidal open, `BenchmarkMetrics` (RMS / P95 / max)
 - [ ] OpenCV visualization
 - [ ] Plot/export telemetry for judging
 - [ ] Baseline acceptance metrics met

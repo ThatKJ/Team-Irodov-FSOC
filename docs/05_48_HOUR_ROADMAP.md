@@ -119,13 +119,27 @@ RMS 0.55 deg, max 0.80 deg. Open vs closed on the same trajectory: detection 57.
 RMS 6.45 deg -> 0.55 deg (11.8x). `fsoc_step7_tests` green (12 checks incl. truth-shortcut
 proof). Steps 1-6 unchanged.
 
-## Hours 34–39 — Step 8: Telemetry + metrics
-- CSV logger
-- FPS
-- pixel and angular errors
-- pan/tilt + commanded/applied rates
-- saturation and visibility
-- RMS/95th percentile error
+## Hours 34–39 — Step 8: Telemetry + metrics [DONE]
+- new `fsoc_telemetry` library — OBSERVER-only; consumes `SimulationStepResult`, never
+  calls back into the loop. Non-interference proven (run with/without telemetry -> identical
+  `SimulationStepResult` sequence).
+- `TelemetryRecord` — 27 flat, unit-suffixed, JSON-mappable fields; absent measurements are
+  `std::optional` in memory (no sentinel) and empty CSV fields on disk
+- `TrackingState { Tracking, TargetLost }` (no decorative "Acquiring")
+- `CsvTelemetryLogger` — synchronous `std::ofstream`, flush per line, no threads/async/deps;
+  logs -> `generated/*.csv` (git-ignored)
+- `BenchmarkMetrics` / `compute_benchmark_metrics` — detection %, RMS/mean/max/final/P95
+  angular error, mean/RMS/max pixel error, mean detection error, command/pan/tilt saturation
+  fractions, mean|abs| + peak applied rates, wall time + processing FPS. Error metrics over
+  frames with a `TrackingError`; percentile = nearest-rank `ceil(0.95*N)-1`.
+- wall clock (`std::chrono::steady_clock`) measured separately; sim dt stays fixed 0.02 s
+- benchmark scenarios A static / B linear / C+E sinusoidal closed / D sinusoidal open
+
+Gate: metrics reproduced from the Step-7 scenarios. PASSED — `fsoc_step8_tests` green (14
+checks incl. the mandatory non-interference test and hand-computed RMS/mean/max/P95/pixel).
+`step8_telemetry_smoke` writes 4 CSVs, prints the benchmark table (Static P95 0.167 deg,
+Sinusoidal-closed P95 0.790 deg vs Sinusoidal-open P95 9.81 deg) and ~4700 FPS / ~90x real
+time. Steps 1-7 unchanged.
 
 ## Hours 39–43 — Step 9: Visualization
 - OpenCV display

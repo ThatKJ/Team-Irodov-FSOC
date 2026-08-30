@@ -159,6 +159,28 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(step7_closed_loop_smoke PRIVATE fsoc::simulation)
     fsoc_set_project_warnings(step7_closed_loop_smoke)
     fsoc_enable_sanitizers(step7_closed_loop_smoke)
+
+    # -----------------------------------------------------------------------
+    # fsoc_telemetry — observer-only telemetry + benchmarking (Step 8).
+    # Consumes SimulationStepResult; never reaches back into the loop.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_telemetry src/telemetry.cpp)
+    add_library(fsoc::telemetry ALIAS fsoc_telemetry)
+    target_include_directories(fsoc_telemetry
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_telemetry PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_telemetry PUBLIC fsoc::simulation)
+    fsoc_set_project_warnings(fsoc_telemetry)
+    fsoc_enable_sanitizers(fsoc_telemetry)
+
+    add_executable(step8_telemetry_smoke apps/step8_telemetry_smoke.cpp)
+    target_link_libraries(step8_telemetry_smoke PRIVATE fsoc::telemetry)
+    fsoc_set_project_warnings(step8_telemetry_smoke)
+    fsoc_enable_sanitizers(step8_telemetry_smoke)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -206,5 +228,11 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step7_tests)
         fsoc_enable_sanitizers(fsoc_step7_tests)
         add_test(NAME fsoc_step7_tests COMMAND fsoc_step7_tests)
+
+        add_executable(fsoc_step8_tests tests/step8_tests.cpp)
+        target_link_libraries(fsoc_step8_tests PRIVATE fsoc::telemetry)
+        fsoc_set_project_warnings(fsoc_step8_tests)
+        fsoc_enable_sanitizers(fsoc_step8_tests)
+        add_test(NAME fsoc_step8_tests COMMAND fsoc_step8_tests)
     endif()
 endif()

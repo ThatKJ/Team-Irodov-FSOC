@@ -34,6 +34,7 @@ apps/step4_renderer_smoke.cpp
 apps/step5_detector_smoke.cpp
 apps/step6_pid_smoke.cpp
 apps/step7_closed_loop_smoke.cpp
+apps/step8_telemetry_smoke.cpp
 cmake/CompilerWarnings.cmake
 cmake/Sanitizers.cmake
 docs/00_PROJECT_BRIEF.md
@@ -67,6 +68,7 @@ include/fsoc/renderer.hpp
 include/fsoc/scenario.hpp
 include/fsoc/simulation_runner.hpp
 include/fsoc/target_state.hpp
+include/fsoc/telemetry.hpp
 include/fsoc/tracking_error.hpp
 include/fsoc/trajectory.hpp
 prompts/CODE_REVIEW_PROMPT.md
@@ -82,6 +84,7 @@ src/observation.cpp
 src/pid_controller.cpp
 src/renderer.cpp
 src/simulation_runner.cpp
+src/telemetry.cpp
 src/tracking_error.cpp
 src/trajectory.cpp
 tests/step1_tests.cpp
@@ -91,3 +94,4 @@ tests/step4_tests.cpp
 tests/step5_tests.cpp
 tests/step6_tests.cpp
 tests/step7_tests.cpp
+tests/step8_tests.cpp

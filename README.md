@@ -134,6 +134,27 @@ For the first 48-hour MVP:
   detection **57 % → 100 %** and RMS **6.45° → 0.55°**
 - `step7_closed_loop_smoke` (static / sinusoidal / open-vs-closed) + `fsoc_step7_tests`
 
+## Step 8 implemented — telemetry + benchmarking
+
+- new `fsoc_telemetry` library — an **observer**: consumes `SimulationStepResult`, never
+  calls back into the loop. Running with vs without telemetry yields a bit-identical
+  `SimulationStepResult` sequence (mandatory non-interference test)
+- `TelemetryRecord` — 27 flat, unit-suffixed, JSON-mappable fields; unavailable
+  measurements are `std::optional` in memory (**no `-1` / NaN / `N/A` sentinel**) and empty
+  fields in CSV; `TrackingState { Tracking, TargetLost }`
+- `CsvTelemetryLogger` — synchronous `std::ofstream`, one flushed line per record, no
+  threads / async / external CSV dependency; writes `generated/step8_*.csv` (git-ignored)
+- `BenchmarkMetrics` / `compute_benchmark_metrics` — detection %, RMS/mean/max/final/**P95**
+  angular error, mean/RMS/max pixel error, mean detection error, command/pan/tilt
+  saturation fractions, mean|abs|+peak applied rates, wall time + processing FPS. Error
+  metrics over frames with a `TrackingError`; percentile = nearest-rank `ceil(0.95·N)-1`
+- **wall clock vs simulation clock:** physics stays on the fixed `dt = 0.02 s` (50 Hz);
+  `processing_fps = frames / wall_time` is measured with `std::chrono` around the step loop
+  only (~4700 FPS ≈ 90× real time) and never feeds the sim dt
+- `step8_telemetry_smoke` runs the 4 benchmark scenarios, exports CSVs, prints the
+  comparison table (Static P95 0.17°, Sinusoidal-closed P95 0.79° vs Sinusoidal-open P95
+  9.81°) + `fsoc_step8_tests`
+
 ## macOS quick start
 
 ```bash
@@ -151,6 +172,7 @@ ctest --preset debug
 ./build/debug/step5_detector_smoke
 ./build/debug/step6_pid_smoke
 ./build/debug/step7_closed_loop_smoke
+./build/debug/step8_telemetry_smoke   # writes generated/step8_*.csv
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

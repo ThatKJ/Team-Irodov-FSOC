@@ -197,3 +197,37 @@ Layers stay distinct — do not alias them:
   swing): ≥ 95 % detection, RMS < 1.0° (achieved ≈ 0.55°), max < 1.5°. Closed-loop must
   beat open-loop on both detection fraction and RMS on the same trajectory (achieved
   57 % → 100 %, 6.45° → 0.55°).
+
+## Telemetry + benchmarking contract (Step 8, frozen)
+
+- **Observer only.** `fsoc_telemetry` (`fsoc/telemetry.hpp` + `src/telemetry.cpp`) depends
+  on `fsoc::simulation`. It is a SINK: `make_telemetry_record(...)`,
+  `compute_benchmark_metrics(...)`, `CsvTelemetryLogger`, and `run_and_record(...)` consume
+  `SimulationStepResult` values and never call back into the runner / PID / camera /
+  detector / renderer / trajectory. Running a simulation with or without telemetry yields a
+  **bit-identical** `SimulationStepResult` sequence (`test_telemetry_non_interference`).
+- **`TelemetryRecord`** — 27 flat, unit-suffixed, JSON-mappable fields (full table in
+  `docs/08_TELEMETRY_SCHEMA.md`). Unavailable measurements are `std::optional<double>` /
+  `std::nullopt` **in memory — never a `-1` / NaN / `N/A` sentinel** — and **empty fields**
+  in CSV. `make_telemetry_record` takes the actuator rate limits so the `*_saturated` flags
+  can be set without the record carrying the whole camera config.
+- **`TrackingState`** — `{ Tracking, TargetLost }` only. Present in every record;
+  `Tracking` iff the frame produced a `TrackingError`.
+- **`*_saturated`** — true when `|command_*_rate| ≥ max_*_rate − 1e-9` (axis slewing at the
+  actuator limit); in the baseline the PID output limit equals the actuator rate, so this
+  is equivalent to "PID output saturated" / "camera clipped the command".
+- **`CsvTelemetryLogger`** — synchronous `std::ofstream`, header from
+  `column_names()` (the one source of column order), one line per record flushed to disk,
+  no threads / async / external CSV library. Output goes to `generated/` (git-ignored);
+  logs are never committed.
+- **`BenchmarkMetrics`** — see `docs/08_TELEMETRY_SCHEMA.md` for the full list.
+  **Denominators:** angular/pixel error metrics over frames with a `TrackingError`
+  (`tracking_frames`); `mean_detection_error_px` over frames with a `detection_error_px`;
+  saturation fractions and rate means/peaks over all frames; `detection_fraction =
+  detected_frames / frames`. **95th percentile:** nearest-rank on the sorted-ascending
+  magnitudes, `index = ceil(0.95·N) − 1` clamped to `[0, N-1]`; no statistics library.
+- **Wall clock vs simulation clock.** Physics uses the fixed `dt = 0.02 s` (50 Hz) only.
+  `wall_execution_time_s` / `processing_fps = frames / wall_execution_time_s` are measured
+  with `std::chrono::steady_clock` around the step loop **only** (telemetry conversion and
+  CSV I/O excluded) and never feed the simulation timestep. The two rates are reported
+  separately (`50 Hz` simulation vs `~4700 FPS` processing / `~90×` real time).

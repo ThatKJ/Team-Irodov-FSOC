@@ -205,3 +205,37 @@ Step 7 wires the tested modules into the first real closed loop. Key decisions:
   detector noise. NOT claimed optimal.
 - **`SimulationMetrics` + `evaluate()`** are simple scoring helpers in `fsoc_simulation`,
   not the Step-8 telemetry system (no CSV/JSON/stream/logger).
+
+## ADR-011 — Telemetry is an observer-only sink (`fsoc_telemetry`)
+**Status:** Accepted
+
+Step 8 adds telemetry + benchmarking. Key decisions:
+
+- **`fsoc_telemetry` is a SINK.** It links `fsoc::simulation` and consumes
+  `SimulationStepResult` values; it never calls back into the runner, PID, camera,
+  detector, renderer, or trajectory. A simulation run with telemetry produces a
+  bit-identical `SimulationStepResult` sequence to one without it — proven by
+  `test_telemetry_non_interference` (run A plain vs run B with a CSV logger interleaved).
+- **Absent values are `std::optional`, never a sentinel.** In memory, unavailable
+  measurements are `std::nullopt`. In CSV they are empty fields between commas. No `-1`,
+  NaN, or `N/A` anywhere in the telemetry API or the documented CSV format.
+- **`TrackingState` has two values** (`Tracking`, `TargetLost`). The runner defines no
+  deterministic acquisition phase and "flat-out slew while tracking" is already carried by
+  `pan_saturated` / `tilt_saturated`, so an `Acquiring` state would be decorative.
+- **`*_saturated` = "axis at the actuator rate limit"** (`|command rate| >= max rate - 1e-9`),
+  because the baseline sets the PID output limit equal to the actuator rate, which makes
+  the literal `|command - applied|` formula always zero. `make_telemetry_record` therefore
+  takes the actuator rate limits rather than the record carrying the whole camera config.
+- **CSV logger is synchronous** — `std::ofstream`, one line per record flushed to disk, no
+  threads / async queue / networking / external CSV library. `column_names()` is the single
+  source of column order (and the stable JSON key list for a later frontend).
+- **Metrics denominators (documented in `docs/08_TELEMETRY_SCHEMA.md`):** angular/pixel
+  error over `tracking_frames`; detection-error over frames with `detection_error_px`;
+  saturation and rate stats over all frames.
+- **Percentile = nearest-rank**, `index = ceil(0.95 * N) - 1` clamped to `[0, N-1]`, on the
+  sorted-ascending magnitudes. No statistics dependency.
+- **Wall clock is separate from simulation time.** Physics stays on the fixed `dt = 0.02 s`.
+  `processing_fps = frames / wall_execution_time_s` is measured with `std::chrono` around
+  the step loop only and never influences the simulation. Reported as a distinct number
+  (~4700 FPS / ~90x real time) from the 50 Hz simulation rate.
+- `SimulationStepResult` / `SimulationRunner` (Step 7) were NOT modified.
