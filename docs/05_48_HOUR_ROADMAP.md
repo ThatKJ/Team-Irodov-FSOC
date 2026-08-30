@@ -96,12 +96,28 @@ axis independence, output saturation, anti-windup bounded + prompt recovery, res
 dt / config / error rejection, deterministic sequence, manual sign check). `step6_pid_smoke`
 PASS (incl. toy scalar-plant sanity: 0.100 -> 0.007 rad). Steps 1-5 unchanged.
 
-## Hours 28–34 — Step 7: Closed-loop integration
-- fixed-step runner
-- trajectory -> camera -> renderer -> detector -> PID -> actuator
-- target loss behavior
+## Hours 28–34 — Step 7: Closed-loop integration [DONE]
+- new `fsoc_simulation` library (links fsoc::core + render + perception + control) — the
+  ONE intentional integration layer; owns clock / fixed step / call order / loss policy /
+  camera stepping, owns NO domain math
+- `SimulationRunner::step()` order: `trajectory.state_at(t)` -> `observe_beacon` ->
+  `renderer.render` -> `detector.detect(cv::Mat)` -> `compute_tracking_error(detection, camera)`
+  -> `pid.update` (or loss policy) -> `camera.step` -> record -> `t += dt`
+- fixed dt = 0.02 s (50 Hz); NOT wall-clock; replayable/deterministic
+- TRUTH vs MEASUREMENT: control feedback is ONLY `detector -> compute_tracking_error -> pid`;
+  `TargetState` / `observation.image_point_px` used only for the diagnostic result fields and
+  the truth-vs-measurement scoring (`detection_error_px`)
+- target-loss policy: no detection -> `pid.reset()` + zero command + camera holds (no search)
+- empirically-tuned MVP baseline PID: kp=12, ki=0, kd=0 (P-dominant on the integrator plant),
+  output limit = camera actuator rate (deg_to_rad(30)); NOT claimed optimal
+- open- vs closed-loop comparison built in (`control_enabled` flag)
 
-Gate: moving target remains inside FOV for nominal scenario significantly better than open-loop.
+Gate: moving target remains inside FOV for nominal scenario significantly better than
+open-loop. PASSED — static acquisition: 4.13 deg -> 0.0000 deg in ~0.34 s, 100% detection,
+final centroid at exact image centre. Sinusoidal (+/-12.4 deg swing, 20 s): 100% detection,
+RMS 0.55 deg, max 0.80 deg. Open vs closed on the same trajectory: detection 57.4% -> 100%,
+RMS 6.45 deg -> 0.55 deg (11.8x). `fsoc_step7_tests` green (12 checks incl. truth-shortcut
+proof). Steps 1-6 unchanged.
 
 ## Hours 34–39 — Step 8: Telemetry + metrics
 - CSV logger

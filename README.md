@@ -109,6 +109,31 @@ For the first 48-hour MVP:
 - default gains are **untuned placeholders** (tuned in Step 7)
 - `step6_pid_smoke` (5 scenarios + toy scalar-plant sanity) + `fsoc_step6_tests`
 
+## Step 7 implemented — closed-loop tracking simulation
+
+- new `fsoc_simulation` library (links `fsoc::core` + `render` + `perception` + `control`)
+  — the **one** intentional integration layer; owns the clock, fixed timestep, subsystem
+  call order, target-loss policy, and camera stepping, and **no** domain math
+- `SimulationRunner::step()` runs one fixed timestep in this order: `trajectory.state_at(t)`
+  → `observe_beacon` → `renderer.render` → `detector.detect(cv::Mat)` →
+  `compute_tracking_error(detection, camera)` → `pid.update` (or loss policy) →
+  `camera.step` → record `SimulationStepResult` → `t += dt`
+- fixed `dt = 0.02 s` (50 Hz); **never wall-clock**; same config + trajectory →
+  bit-identical result sequence
+- **pixel-only feedback:** control is driven solely by the detected centroid;
+  `TargetState` / `observation.image_point_px` / exact `Projection` feed only the labelled
+  diagnostic fields and truth-vs-measurement scoring — proven by
+  `test_control_follows_detected_not_truth`
+- **target-loss policy:** no detection → `pid.reset()` + zero command + camera holds (no
+  search); the loop resumes from reset if the target drifts back into the FOV
+- `SimulationRunnerConfig::validate()` rejects PID output limit > camera actuator rate and
+  renderer/camera dimension mismatch
+- empirically-tuned MVP baseline PID **kp = 12, ki = 0, kd = 0** (P-dominant on the
+  integrator plant — not claimed optimal); results: static acquisition **4.13° → 0.0° in
+  ~0.34 s**, sinusoidal (±12.4°) RMS **0.55°** at 100 % detection, open-loop → closed-loop
+  detection **57 % → 100 %** and RMS **6.45° → 0.55°**
+- `step7_closed_loop_smoke` (static / sinusoidal / open-vs-closed) + `fsoc_step7_tests`
+
 ## macOS quick start
 
 ```bash
@@ -125,6 +150,7 @@ ctest --preset debug
 ./build/debug/step4_renderer_smoke
 ./build/debug/step5_detector_smoke
 ./build/debug/step6_pid_smoke
+./build/debug/step7_closed_loop_smoke
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

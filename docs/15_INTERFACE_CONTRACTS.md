@@ -149,3 +149,51 @@ Layers stay distinct — do not alias them:
   tuned during the Step-7 closed-loop experiments. `output_limit_rad_s` defaults to
   `deg_to_rad(30)` (the default `CameraConfig` actuator rate); the Step-7 runner is
   responsible for keeping controller and actuator limits consistent.
+
+## Closed-loop SimulationRunner contract (Step 7, frozen)
+
+- **The one integration layer.** `fsoc_simulation` (`fsoc/simulation_runner.hpp` +
+  `src/simulation_runner.cpp`) links `fsoc::core` + `fsoc::render` + `fsoc::perception` +
+  `fsoc::control`. This is the **only** place those modules come together; the lower
+  libraries stay independent of each other. The runner owns the clock, the fixed timestep,
+  subsystem call order, the target-loss policy, and camera stepping — and **no domain
+  math** (it duplicates no projection / trajectory / centroid / PID / pixel→angle code).
+- **`step()` order (frozen).** `trajectory.state_at(sim_time)` → `observe_beacon(camera, pos)`
+  → `renderer.render(observation)` → `detector.detect(frame)` →
+  `compute_tracking_error(detection, camera)` → if error present `pid.update(error, dt)`
+  else `pid.reset()` + `zero_control_command()` → `camera.step(cmd.pan, cmd.tilt, dt)` →
+  record `SimulationStepResult` → `sim_time += dt`, `++frame_index`. The camera is **not**
+  moved before the frame is computed.
+- **Fixed timestep.** `timestep_s` (default 0.02 s = 50 Hz), advanced by `sim_time += dt`.
+  **Never wall-clock.** `std::chrono` may measure execution speed but never the simulation
+  dt. Fully replayable: same config + trajectory → bit-identical `SimulationStepResult`
+  sequence.
+- **TRUTH vs MEASUREMENT (frozen).** The control feedback path is exactly
+  `detector.detect(cv::Mat)` → `compute_tracking_error(detection, camera)` → `pid.update`.
+  `TargetState.position_m/velocity_mps`, `CameraObservation.image_point_px`, and the exact
+  `Projection` are used **only** for the diagnostic fields of `SimulationStepResult`
+  (labelled "truth") and for `detection_error_px` scoring. None ever reaches the controller.
+  Verified structurally (the runner reads `observation.image_point_px` only in the scoring
+  block) and executably (`test_control_follows_detected_not_truth`).
+- **Target-loss policy.** No detection ⇒ `tracking_error == std::nullopt` ⇒ `pid.reset()`,
+  `command == {0,0}`, `camera.step(0,0,dt)` (camera holds its orientation). No search /
+  reacquisition. If target motion brings the beacon back into the FOV, the PID resumes from
+  its reset state.
+- **Trajectory injection.** `SimulationRunner(SimulationRunnerConfig, const Trajectory&)` —
+  any `Trajectory` subclass; the runner holds it by reference (caller keeps it alive) and
+  never hardcodes a concrete trajectory.
+- **Camera authority.** The runner constructs/owns `PanTiltCamera` and never duplicates its
+  pan/tilt state; `reset()` reconstructs it at the configured initial pose.
+- **Controller/actuator consistency.** `SimulationRunnerConfig::validate()` rejects a
+  configuration whose PID `output_limit_rad_s` exceeds the camera's `max_*_rate_rad_s`, and
+  requires renderer dimensions to equal the camera's. The MVP baseline sets them equal.
+- **Baseline gains (empirically tuned, NOT optimal).** `baseline_runner_config()` uses
+  kp = 12, ki = 0, kd = 0 on both axes (P-dominant: the plant angle is the integral of the
+  rate command, so P alone gives a first-order, non-oscillatory response with zero
+  steady-state error for a stationary target). Output limit = `deg_to_rad(30)`.
+- **Performance gates.** Static acquisition: 100 % detection after frame 0, final total
+  angular error < 0.05° (achieved ≈ 0°), final centroid < 2 px from centre. Linear:
+  ≥ 95 % detection, RMS angular error < 0.75° (achieved ≈ 0.39°). Sinusoidal (±12.4°
+  swing): ≥ 95 % detection, RMS < 1.0° (achieved ≈ 0.55°), max < 1.5°. Closed-loop must
+  beat open-loop on both detection fraction and RMS on the same trajectory (achieved
+  57 % → 100 %, 6.45° → 0.55°).

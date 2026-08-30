@@ -136,6 +136,29 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(step5_detector_smoke PRIVATE fsoc::perception fsoc::render)
     fsoc_set_project_warnings(step5_detector_smoke)
     fsoc_enable_sanitizers(step5_detector_smoke)
+
+    # -----------------------------------------------------------------------
+    # fsoc_simulation — the deterministic closed-loop integration layer (Step 7).
+    # This is the ONE place the tested modules come together.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_simulation src/simulation_runner.cpp)
+    add_library(fsoc::simulation ALIAS fsoc_simulation)
+    target_include_directories(fsoc_simulation
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_simulation PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_simulation
+        PUBLIC fsoc::core fsoc::render fsoc::perception fsoc::control)
+    fsoc_set_project_warnings(fsoc_simulation)
+    fsoc_enable_sanitizers(fsoc_simulation)
+
+    add_executable(step7_closed_loop_smoke apps/step7_closed_loop_smoke.cpp)
+    target_link_libraries(step7_closed_loop_smoke PRIVATE fsoc::simulation)
+    fsoc_set_project_warnings(step7_closed_loop_smoke)
+    fsoc_enable_sanitizers(step7_closed_loop_smoke)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -177,5 +200,11 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step5_tests)
         fsoc_enable_sanitizers(fsoc_step5_tests)
         add_test(NAME fsoc_step5_tests COMMAND fsoc_step5_tests)
+
+        add_executable(fsoc_step7_tests tests/step7_tests.cpp)
+        target_link_libraries(fsoc_step7_tests PRIVATE fsoc::simulation)
+        fsoc_set_project_warnings(fsoc_step7_tests)
+        fsoc_enable_sanitizers(fsoc_step7_tests)
+        add_test(NAME fsoc_step7_tests COMMAND fsoc_step7_tests)
     endif()
 endif()

@@ -43,7 +43,17 @@
 - [x] anti-windup — integral hard clamp + conditional integration; output clamp
 - [x] `reset()` clears integral / previous error / first-sample flags
 - [x] validation — bad `dt_s` / config / non-finite `TrackingError` -> `std::invalid_argument`
-- [ ] closed-loop runner
+
+## Closed-loop integration
+- [x] `fsoc_simulation` lib — `SimulationRunner` wires trajectory -> observe -> render ->
+      detect -> tracking error -> PID -> camera.step (the one integration layer)
+- [x] deterministic fixed-step (dt = 0.02 s, 50 Hz); `step()` + `run_for()` + `reset()`
+- [x] `SimulationStepResult` (truth fields labelled; control path never reads them)
+- [x] pixel-only feedback verified — control follows detected centroid, not projection truth
+- [x] target-loss policy — PID reset + zero command + camera holds; reappearance resumes
+- [x] `SimulationMetrics` + `evaluate()` (detection %, RMS/max/final angular error, lost frames)
+- [x] open- vs closed-loop comparison (`control_enabled`)
+- [x] empirically-tuned MVP baseline gains (kp=12, ki=0, kd=0)
 
 ## Evidence
 - [ ] telemetry CSV

@@ -14,10 +14,10 @@
 - [x] Synthetic grayscale beacon renderer (OpenCV C++) — CV_8UC1, sub-pixel Gaussian beacon
 - [x] Threshold + centroid detector — connected-components + intensity-weighted centroid, ~0.02 px on clean frames
 - [x] Independent pan/tilt PID controller — `fsoc_control` (OpenCV-free), angular error -> rate command, anti-windup, reset
-- [ ] Closed-loop SimulationRunner
+- [x] Closed-loop SimulationRunner — `fsoc_simulation`, deterministic fixed-step, pixel-only feedback, static acq final error ~0 deg
 - [ ] Telemetry logger
 - [ ] FPS and timing measurement
-- [ ] Target-loss behavior
+- [x] Target-loss behavior — no detection -> PID reset + zero command + camera holds (no search mode)
 - [ ] Rate saturation telemetry
 - [ ] Parameterized benchmark scenarios
 - [ ] OpenCV visualization

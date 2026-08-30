@@ -107,6 +107,36 @@ Step 6 - pan/tilt PID controller (CMake 4.4 / Ninja / Apple clang, C++20):
 - ASan/UBSan build: PASS (all 6 test executables + step6 smoke, no findings)
 - Step 1-5 regression: step1_math_smoke still ~0.001 deg; step2-5 smokes unchanged
 
+Step 7 - closed-loop SimulationRunner (CMake 4.4 / Ninja / Apple clang, C++20,
+OpenCV 5.0.0):
+- CMake configure/build: PASS, no new project warnings; new fsoc_simulation library
+  links fsoc::core + render + perception + control (the one integration layer)
+- CTest: PASS (7 executables) - fsoc_step1..7_tests
+- Truth boundary verified: grep of src/simulation_runner.cpp shows
+  observation.image_point_px used ONLY in the detection_error_px diagnostic block;
+  the control path is detector_.detect -> compute_tracking_error(detection, camera_)
+  -> controller_.update -> camera_.step
+- fsoc_step7_tests: PASS (12 checks): clock starts at 0 and increments by exactly dt;
+  deterministic (bit-identical result sequence over two runs); static acquisition
+  begins >50 px off-centre, 100% detected, final angular error < 0.05 deg, final
+  centroid < 2 px, camera pan/tilt move the correct way; linear target 100% detected,
+  RMS 0.39 deg (gate 0.75); sinusoidal 100% detected, RMS 0.55 deg (gate 1.0), max
+  0.80 deg, not diverging; closed-loop beats open-loop (det +42.6 pts, RMS 11.8x
+  lower); no-detection -> zero command + camera holds; sinusoid fast enough to lose
+  and reacquire the target -> PID resumes; command <= PID limit and applied rate <=
+  actuator limit across a harsh run (saturation observed); truth-shortcut test:
+  frame with a strong blob opposite the true projection -> command follows the
+  DETECTED blob; manual one-frame trace: RIGHT+ABOVE -> pan>0,tilt>0 and pixel
+  error DECREASES on the next frame; Step 1-6 regression assertions
+- step7_closed_loop_smoke: PASS - static acq beacon (428.89,167.08)->(320.00,240.00),
+  4.13 deg -> 0.0000 deg by t~0.5 s; sinusoidal 20 s 100% detected RMS 0.5461 deg
+  max 0.7982 deg; OPEN vs CLOSED detection 57.4% -> 100.0%, RMS 6.4549 -> 0.5461 deg
+- PID baseline (empirically tuned, not optimal): kp=12, ki=0, kd=0, output limit =
+  camera max rate (deg_to_rad(30)); kp swept 3..20, chose 12 for exact static
+  convergence + no oscillation + tight moving RMS
+- ASan/UBSan build: PASS (all 7 test executables + step7 smoke, no findings)
+- Step 1-6 regression: step1_math_smoke still ~0.001 deg; step2-6 smokes unchanged
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -118,3 +148,4 @@ macOS target workflow:
   ./build/debug/step4_renderer_smoke
   ./build/debug/step5_detector_smoke
   ./build/debug/step6_pid_smoke
+  ./build/debug/step7_closed_loop_smoke

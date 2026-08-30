@@ -163,3 +163,45 @@ Step 6 adds the first control law. Key decisions:
   `integral_limit=0.5`, `output_limit_rad_s=deg_to_rad(30)`), to be tuned in Step 7. The
   PID never reads `CameraConfig`; the Step-7 runner keeps controller/actuator limits aligned.
 - `PIDController::Axis` is a private nested helper, not a public reusable contract.
+
+## ADR-010 — Closed-loop integration: `fsoc_simulation`, pixel-only feedback, P-dominant baseline
+**Status:** Accepted
+
+Step 7 wires the tested modules into the first real closed loop. Key decisions:
+
+- **One integration library `fsoc_simulation`** links all four lower libs (`core`, `render`,
+  `perception`, `control`). Integration is its job; the lower libs remain unaware of each
+  other. `SimulationRunner` owns the clock, the fixed timestep, subsystem call order, the
+  target-loss policy, and camera stepping — and duplicates **no** domain math.
+- **Frozen `step()` order:** trajectory → `observe_beacon` → `renderer.render` →
+  `detector.detect` → `compute_tracking_error` → PID (or loss policy) → `camera.step` →
+  record → advance time. The camera is never moved before the frame is computed.
+- **Truth vs measurement is enforced, not just intended.** The only feedback path is
+  `detector.detect(cv::Mat)` → `compute_tracking_error(detection, camera)` → `pid.update`.
+  `TargetState`, `CameraObservation.image_point_px`, and the exact `Projection` populate
+  only the diagnostic `SimulationStepResult` fields and the `detection_error_px` score.
+  An executable test injects a frame whose detected blob is on the opposite side of centre
+  from the true projection and shows the command follows the **detected** blob.
+- **Fixed dt only** (0.02 s = 50 Hz), advanced by `sim_time += dt`. No wall-clock in the
+  dynamics; the run is bit-for-bit replayable.
+- **Target-loss policy:** no detection → `pid.reset()` + zero command + camera holds. No
+  search / scan / reacquisition mode in this step. If the target drifts back into the FOV,
+  the PID resumes from reset.
+- **Trajectory injected by `const Trajectory&`** (caller owns lifetime) — the runner never
+  hardcodes a concrete trajectory. The camera is owned by the runner; `PanTiltCamera`
+  stays the sole authority on pan/tilt state.
+- **`SimulationRunnerConfig::validate()` rejects PID output limit > camera actuator rate**
+  and renderer dimensions ≠ camera dimensions, so the runner can never silently demand a
+  rate the actuator cannot deliver. The baseline sets PID output limit = camera max rate.
+- **Empirically-tuned baseline PID: kp = 12, ki = 0, kd = 0.** Method: the plant (camera
+  angle = integral of rate command) already contains one integrator, so with P-only the
+  stationary-target loop is first-order (`de/dt = −kp·e`) — non-oscillatory for any
+  `kp·dt < 1`. Swept kp ∈ {3, 6, 9, 12, 16, 20}: static settling time 1.44 s → 0.22 s,
+  sinusoidal RMS 2.10° → 0.33°, all stable, all 100 % detection. Chose kp = 12: exact
+  zero static steady-state error, sinusoidal RMS 0.55°, `kp·dt = 0.24` (well-damped),
+  detector-noise amplification ≈ 1.3e-4 rad/s (negligible). Ki = 0: no steady-state bias
+  on the integrator plant, and Ki would form a marginally-stable double integrator needing
+  Kd. Kd = 0: plant already well damped; derivative would only amplify the ~0.02 px
+  detector noise. NOT claimed optimal.
+- **`SimulationMetrics` + `evaluate()`** are simple scoring helpers in `fsoc_simulation`,
+  not the Step-8 telemetry system (no CSV/JSON/stream/logger).
