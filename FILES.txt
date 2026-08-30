@@ -28,6 +28,7 @@ README.md
 SETUP_MACOS.md
 VALIDATION.txt
 apps/step1_math_smoke.cpp
+apps/step2_trajectory_smoke.cpp
 cmake/CompilerWarnings.cmake
 cmake/Sanitizers.cmake
 docs/00_PROJECT_BRIEF.md
@@ -52,6 +53,8 @@ include/fsoc/camera.hpp
 include/fsoc/config.hpp
 include/fsoc/environment.hpp
 include/fsoc/geometry.hpp
+include/fsoc/target_state.hpp
+include/fsoc/trajectory.hpp
 prompts/CODE_REVIEW_PROMPT.md
 prompts/DEBUGGING_PROMPT.md
 prompts/HANDOFF_PROMPT.md
@@ -60,4 +63,6 @@ prompts/STEP_PROMPTS.md
 src/camera.cpp
 src/environment.cpp
 src/geometry.cpp
+src/trajectory.cpp
 tests/step1_tests.cpp
+tests/step2_tests.cpp

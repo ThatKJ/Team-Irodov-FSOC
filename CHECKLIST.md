@@ -8,8 +8,8 @@
 - [x] Velocity limits + tilt stops
 - [x] Step-1 unit checks
 - [x] Terminal math smoke test
-- [ ] Trajectory interface + linear trajectory
-- [ ] Sinusoidal trajectory
+- [x] Trajectory interface + stationary + linear trajectory
+- [x] Sinusoidal trajectory
 - [ ] Synthetic grayscale beacon renderer (OpenCV C++)
 - [ ] Threshold + centroid detector
 - [ ] Measurement/error data contracts

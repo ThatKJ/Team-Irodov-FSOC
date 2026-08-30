@@ -7,8 +7,22 @@ Validated in packaging environment with CMake 3.31 / C++20:
 - step1_math_smoke: PASS
 - final terminal pointing error: approximately 0.001 deg pan / 0.001 deg tilt
 
+Step 2 — target trajectory engine (CMake 4.4 / Ninja / Apple clang, C++20):
+- CMake configure: PASS
+- C++ compile/link: PASS, no new project warnings (-Wall -Wextra -Wpedantic
+  -Wconversion -Wsign-conversion -Wshadow -Wnon-virtual-dtor)
+- CTest: PASS (2 executables) — fsoc_step1_tests + fsoc_step2_tests
+- fsoc_step2_tests: PASS (stationary/linear/sinusoidal analytic checks, negative-velocity
+  components, zero-amplitude and zero-frequency axes, determinism, finiteness,
+  central-difference velocity cross-check, negative/non-finite time rejection,
+  constructor input validation)
+- step2_trajectory_smoke: PASS (samples match hand computation; e.g. sinusoidal
+  y(t=1 s) = 10.000 m, vy = 0.000 m/s, vz = -6.283 m/s)
+- Step 1 regression: step1_math_smoke still PASS, final pointing error ~0.001 deg
+
 macOS target workflow:
   cmake --preset debug
   cmake --build --preset debug
   ctest --preset debug
   ./build/debug/step1_math_smoke
+  ./build/debug/step2_trajectory_smoke

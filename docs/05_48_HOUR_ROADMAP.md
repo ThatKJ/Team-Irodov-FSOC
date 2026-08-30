@@ -11,13 +11,17 @@
 
 Gate: `ctest --preset debug` passes and the camera converges numerically without pixels.
 
-## Hours 4–8 — Step 2: Trajectory engine
-- `Trajectory` interface or value-policy abstraction
-- linear target
-- sinusoidal target
-- deterministic tests
+## Hours 4–8 — Step 2: Trajectory engine [DONE]
+- `Trajectory` abstract interface: `TargetState state_at(double time_s) const`
+- stationary target
+- linear constant-velocity target (signed components)
+- sinusoidal target with analytic velocity
+- deterministic analytic tests + terminal smoke test
+- deliberate input validation (`std::invalid_argument`)
 
-Gate: sampled positions/velocities agree with analytic expectations.
+Gate: sampled positions/velocities agree with analytic expectations. PASSED —
+`fsoc_step2_tests` green, `step2_trajectory_smoke` matches hand computation, Step 1
+unchanged (final pointing error still ~0.001 deg).
 
 ## Hours 8–13 — Step 3: Observation contract
 - define projection/measurement structs

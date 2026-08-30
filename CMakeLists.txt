@@ -17,6 +17,7 @@ add_library(fsoc_core
     src/geometry.cpp
     src/camera.cpp
     src/environment.cpp
+    src/trajectory.cpp
 )
 add_library(fsoc::core ALIAS fsoc_core)
 
@@ -41,11 +42,23 @@ target_link_libraries(step1_math_smoke PRIVATE fsoc::core)
 fsoc_set_project_warnings(step1_math_smoke)
 fsoc_enable_sanitizers(step1_math_smoke)
 
+add_executable(step2_trajectory_smoke apps/step2_trajectory_smoke.cpp)
+target_link_libraries(step2_trajectory_smoke PRIVATE fsoc::core)
+fsoc_set_project_warnings(step2_trajectory_smoke)
+fsoc_enable_sanitizers(step2_trajectory_smoke)
+
 if(FSOC_BUILD_TESTS)
     enable_testing()
+
     add_executable(fsoc_step1_tests tests/step1_tests.cpp)
     target_link_libraries(fsoc_step1_tests PRIVATE fsoc::core)
     fsoc_set_project_warnings(fsoc_step1_tests)
     fsoc_enable_sanitizers(fsoc_step1_tests)
     add_test(NAME fsoc_step1_tests COMMAND fsoc_step1_tests)
+
+    add_executable(fsoc_step2_tests tests/step2_tests.cpp)
+    target_link_libraries(fsoc_step2_tests PRIVATE fsoc::core)
+    fsoc_set_project_warnings(fsoc_step2_tests)
+    fsoc_enable_sanitizers(fsoc_step2_tests)
+    add_test(NAME fsoc_step2_tests COMMAND fsoc_step2_tests)
 endif()

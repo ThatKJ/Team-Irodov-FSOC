@@ -29,6 +29,17 @@ For the first 48-hour MVP:
 - terminal-only smoke test
 - 12 unit checks using CTest, with no external test framework
 
+## Step 2 implemented — target trajectory engine
+
+- `TargetState` = world `position_m` + `velocity_mps` (SI, double precision)
+- `Trajectory` abstract interface: pure `state_at(double time_s)`, no owned clock
+- stationary, linear constant-velocity (signed), and sinusoidal trajectories
+- sinusoidal velocity is the exact analytic derivative; frequency in Hz (`omega = 2*pi*f`)
+- deliberate input validation via `std::invalid_argument` (non-finite / negative time,
+  non-finite params, negative frequency/amplitude)
+- `step2_trajectory_smoke` + deterministic analytic CTest suite (`fsoc_step2_tests`)
+- no coupling to camera / perception / control
+
 ## macOS quick start
 
 ```bash
@@ -39,6 +50,7 @@ cmake --preset debug
 cmake --build --preset debug
 ctest --preset debug
 ./build/debug/step1_math_smoke
+./build/debug/step2_trajectory_smoke
 ```
 
 Do **not** install OpenCV until the roadmap reaches the synthetic image/tracking step. When needed:

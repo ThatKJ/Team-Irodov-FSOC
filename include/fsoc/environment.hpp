@@ -4,12 +4,12 @@
 
 #include "fsoc/camera.hpp"
 #include "fsoc/geometry.hpp"
+#include "fsoc/target_state.hpp"
 
 namespace fsoc {
 
-struct TargetState {
-    Vec3 position_m{};
-};
+// TargetState is defined in fsoc/target_state.hpp so the trajectory layer can depend on
+// target truth without pulling in camera/projection headers.
 
 // Mathematical world container only. Trajectory generation and control policy stay separate.
 class Environment {
