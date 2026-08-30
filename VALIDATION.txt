@@ -83,6 +83,30 @@ OpenCV 5.0.0 via Homebrew):
 - ASan/UBSan build: PASS (all 5 test executables + step5 smoke, no findings)
 - Step 1-4 regression: step1_math_smoke still ~0.001 deg; step2/3/4 smokes unchanged
 
+Step 6 - pan/tilt PID controller (CMake 4.4 / Ninja / Apple clang, C++20):
+- CMake configure/build: PASS, no new project warnings; new fsoc_control library
+  links fsoc::core ONLY - OpenCV-free (grep: no opencv2 / cv:: / fsoc_render /
+  fsoc_perception in pid_controller.hpp/.cpp). Builds regardless of OpenCV.
+- CTest: PASS (6 executables) - fsoc_step1..6_tests
+- fsoc_step6_tests: PASS (15 checks): proportional sign in all 4 quadrants + zero;
+  P magnitude == kp*e; integral accumulates as ki*e*dt*n and cannot exceed
+  ki*integral_limit over 2000 frames; derivative step == kd*de/dt and is 0 on the
+  first sample; pan/tilt axes independent (identical tilt output regardless of pan
+  error); output never exceeds +/- output_limit; large +/- error saturates +/-;
+  anti-windup keeps |command| <= limit for 500 saturated frames then recovers to 0
+  in one frame, toy-plant error 1.0 -> <0.1 and comes off saturation; reset() makes
+  the next update identical to a fresh controller's first update (integral + deriv);
+  invalid dt (0 / negative / NaN / Inf) rejected with state untouched; invalid config
+  (negative kp/ki/kd/integral_limit, 0/negative/Inf output_limit, NaN gain, bad tilt
+  axis) rejected; non-finite TrackingError (angular or pixel) rejected; identical
+  command sequence from reset across two runs; manual sign check (+/-0.05,+/-0.02)
+- step6_pid_smoke: PASS - S1 (+0.05,+0.02)->(+0.1025,+0.0410); S2 negative mirror;
+  S3 pan_rate grows 0.0615->0.0690 over 6 frames (integral); S4 (2.0,-2.0)->
+  (+0.5236,-0.5236) saturated; S5 first update after reset -> 0 (deriv suppressed);
+  toy scalar plant |pan_err| 0.100 -> 0.007 rad
+- ASan/UBSan build: PASS (all 6 test executables + step6 smoke, no findings)
+- Step 1-5 regression: step1_math_smoke still ~0.001 deg; step2-5 smokes unchanged
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -93,3 +117,4 @@ macOS target workflow:
   ./build/debug/step3_observation_smoke
   ./build/debug/step4_renderer_smoke
   ./build/debug/step5_detector_smoke
+  ./build/debug/step6_pid_smoke

@@ -10,7 +10,7 @@ cv::Mat SyntheticCameraRenderer::render(const CameraObservation& observation);  
 std::optional<BeaconDetection> BeaconDetector::detect(const cv::Mat& frame);    // pixels only
 std::optional<TrackingError> compute_tracking_error(
     const std::optional<BeaconDetection>&, const PanTiltCamera&);
-ControlCommand pid.update(const TrackingError&, double dt_s);
+ControlCommand PIDController::update(const TrackingError&, double dt_s);  // rad/s rates
 AppliedRates camera.step(command.pan_rate_rad_s, command.tilt_rate_rad_s, dt_s);
 telemetry.record(...);
 ```
@@ -112,3 +112,40 @@ Layers stay distinct — do not alias them:
   large enough. No `(-1,-1)`, NaN, or zero sentinel — the Step-3 contract holds.
 - **Deterministic.** The same frame yields a bit-identical centroid.
 - `BeaconDetection` stays centroid-only: no fabricated confidence.
+
+## Pan/tilt PID controller contract (Step 6, frozen)
+
+- **Module boundary.** The controller lives in `fsoc_control` (`fsoc/pid_controller.hpp` +
+  `src/pid_controller.cpp`), linking **`fsoc::core` only** (via `fsoc/tracking_error.hpp`
+  for the `TrackingError` contract). It is **OpenCV-free** and must not link or include
+  `fsoc_render` / `fsoc_perception` / OpenCV. `update()` consumes only `TrackingError`
+  (radians) + `dt_s` — never `TargetState`, target XYZ, trajectory, `CameraObservation`,
+  `cv::Mat`, `BeaconDetection`, a projected `ImagePoint`, or `PanTiltCamera`.
+- **Output.** `ControlCommand { double pan_rate_rad_s; double tilt_rate_rad_s; }` —
+  desired actuator angular **velocity**, rad/s. Never absolute angles; the PID never
+  touches `PanTiltCamera` (actuation is Step 7). `zero_control_command()` is the explicit
+  hold-still value the runner uses on target loss.
+- **Law (per axis, discrete).** `e` = `angular.pan_rad` / `angular.tilt_rad`;
+  `D = (e − e_prev)/dt_s`, forced to `0` on the first `update()` after construction/`reset()`;
+  `I += e·dt_s`; `u = kp·e + ki·I + kd·D`; `command = clamp(u, ±output_limit_rad_s)`.
+- **Anti-windup.** (1) `I` is hard-clamped to `±integral_limit` every update. (2) Conditional
+  integration: if `u` is beyond `±output_limit_rad_s` **and** `e` has the same sign as that
+  saturation, the sample is not accumulated (`I` held). Any other case commits the clamped
+  accumulation, so `I` unwinds as soon as `e` reverses.
+- **Sign (frozen).** `e > 0` (beacon RIGHT / ABOVE) with `kp > 0` ⇒ `command > 0` ⇒ pan
+  right / tilt up. Neither axis is inverted. Positive error → positive rate, which drives
+  the axis toward the beacon under `PanTiltCamera::step`.
+- **Reset.** `reset()` clears both integrals, both previous errors, and both first-sample
+  flags; the next `update()` behaves exactly like the first.
+- **Validation.** `update()` throws `std::invalid_argument` if `dt_s` is non-finite or
+  `≤ 0`, or if any `TrackingError` component is non-finite — **state is not mutated on
+  throw**. `PIDControllerConfig::validate()` requires finite `kp, ki, kd, integral_limit ≥ 0`
+  and finite `output_limit_rad_s > 0` on both axes.
+- **Axes independent.** Pan and tilt each own their integral / previous-error / first-sample
+  state; one axis saturating or winding up does not affect the other.
+- **Deterministic, allocation-free.** The same input sequence from `reset()` yields a
+  bit-identical command sequence; `update()` performs no heap allocation.
+- **Gains.** `PIDControllerConfig{}` defaults are **untuned baseline placeholders** — to be
+  tuned during the Step-7 closed-loop experiments. `output_limit_rad_s` defaults to
+  `deg_to_rad(30)` (the default `CameraConfig` actuator rate); the Step-7 runner is
+  responsible for keeping controller and actuator limits consistent.

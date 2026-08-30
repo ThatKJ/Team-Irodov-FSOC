@@ -75,13 +75,26 @@ green (12 checks); clean interior sub-pixel error ~0.02 px (gate 0.15); the (400
 manual case recovered (400.410, 179.687) from pixels alone; `step5_detector_smoke` PASS.
 Steps 1-4 unchanged.
 
-## Hours 23–28 — Step 6: PID control
-- separate PID class
-- independent pan/tilt loops
-- anti-windup/output clamp
-- reset on scenario restart/loss policy
+## Hours 23–28 — Step 6: PID control [DONE]
+- new `fsoc_control` library — depends on `fsoc::core` ONLY (via `fsoc/tracking_error.hpp`);
+  OpenCV-free, no image/perception dependency
+- `PIDController::update(const TrackingError&, double dt_s) -> ControlCommand` (rad/s rates,
+  never absolute angles); `reset()`; `zero_control_command()` helper for the Step-7 runner
+- two independent axes: `u = kp*e + ki*I + kd*D` on `angular.pan_rad` / `angular.tilt_rad`
+- derivative `= (e - e_prev)/dt`, forced 0 on the first update after construction/reset
+- anti-windup: integral hard-clamped to +/- `integral_limit` every update, plus conditional
+  integration (hold the integral while the command is saturated in the error's direction)
+- output clamped to +/- `output_limit_rad_s`
+- validation: non-finite / <=0 `dt_s` and non-finite `TrackingError` -> `std::invalid_argument`
+  (state untouched on throw); invalid config -> `std::invalid_argument`
+- sign preserved: `e > 0` (RIGHT / ABOVE) with `kp > 0` -> command `> 0` (PAN RIGHT / TILT UP)
+- default gains are UNTUNED placeholders (to be tuned in Step 7)
 
-Gate: controller unit tests pass without OpenCV.
+Gate: controller unit tests pass without OpenCV. PASSED — `fsoc_step6_tests` green (15 checks:
+sign in all 4 quadrants + zero, P magnitude, I accumulation + clamp, D step + first-sample,
+axis independence, output saturation, anti-windup bounded + prompt recovery, reset, invalid
+dt / config / error rejection, deterministic sequence, manual sign check). `step6_pid_smoke`
+PASS (incl. toy scalar-plant sanity: 0.100 -> 0.007 rad). Steps 1-5 unchanged.
 
 ## Hours 28–34 — Step 7: Closed-loop integration
 - fixed-step runner

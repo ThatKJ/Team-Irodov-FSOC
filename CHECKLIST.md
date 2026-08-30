@@ -13,7 +13,7 @@
 - [x] Measurement/error data contracts (observation / detection / tracking-error, frozen sign conventions)
 - [x] Synthetic grayscale beacon renderer (OpenCV C++) — CV_8UC1, sub-pixel Gaussian beacon
 - [x] Threshold + centroid detector — connected-components + intensity-weighted centroid, ~0.02 px on clean frames
-- [ ] Independent pan/tilt PID controller
+- [x] Independent pan/tilt PID controller — `fsoc_control` (OpenCV-free), angular error -> rate command, anti-windup, reset
 - [ ] Closed-loop SimulationRunner
 - [ ] Telemetry logger
 - [ ] FPS and timing measurement

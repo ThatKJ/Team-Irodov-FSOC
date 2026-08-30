@@ -39,6 +39,23 @@ fsoc_set_project_warnings(fsoc_core)
 fsoc_enable_sanitizers(fsoc_core)
 
 # ---------------------------------------------------------------------------
+# fsoc_control — pan/tilt PID controller (Step 6). OpenCV-FREE.
+# Depends on fsoc::core only (fsoc/tracking_error.hpp contract). No image,
+# perception, or OpenCV dependency.
+# ---------------------------------------------------------------------------
+add_library(fsoc_control src/pid_controller.cpp)
+add_library(fsoc::control ALIAS fsoc_control)
+target_include_directories(fsoc_control
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
+target_compile_features(fsoc_control PUBLIC cxx_std_20)
+target_link_libraries(fsoc_control PUBLIC fsoc::core)
+fsoc_set_project_warnings(fsoc_control)
+fsoc_enable_sanitizers(fsoc_control)
+
+# ---------------------------------------------------------------------------
 # OpenCV discovery (image/perception boundary only — never linked into fsoc_core)
 # ---------------------------------------------------------------------------
 set(FSOC_OPENCV_AVAILABLE OFF)
@@ -70,6 +87,11 @@ add_executable(step3_observation_smoke apps/step3_observation_smoke.cpp)
 target_link_libraries(step3_observation_smoke PRIVATE fsoc::core)
 fsoc_set_project_warnings(step3_observation_smoke)
 fsoc_enable_sanitizers(step3_observation_smoke)
+
+add_executable(step6_pid_smoke apps/step6_pid_smoke.cpp)
+target_link_libraries(step6_pid_smoke PRIVATE fsoc::control)
+fsoc_set_project_warnings(step6_pid_smoke)
+fsoc_enable_sanitizers(step6_pid_smoke)
 
 # ---------------------------------------------------------------------------
 # fsoc_render — synthetic image renderer (OpenCV-dependent; Step 4)
@@ -136,6 +158,12 @@ if(FSOC_BUILD_TESTS)
     fsoc_set_project_warnings(fsoc_step3_tests)
     fsoc_enable_sanitizers(fsoc_step3_tests)
     add_test(NAME fsoc_step3_tests COMMAND fsoc_step3_tests)
+
+    add_executable(fsoc_step6_tests tests/step6_tests.cpp)
+    target_link_libraries(fsoc_step6_tests PRIVATE fsoc::control)
+    fsoc_set_project_warnings(fsoc_step6_tests)
+    fsoc_enable_sanitizers(fsoc_step6_tests)
+    add_test(NAME fsoc_step6_tests COMMAND fsoc_step6_tests)
 
     if(FSOC_OPENCV_AVAILABLE)
         add_executable(fsoc_step4_tests tests/step4_tests.cpp)

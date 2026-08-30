@@ -36,8 +36,13 @@
 - [x] input validation — empty / non-CV_8UC1 rejected with `std::invalid_argument`
 
 ## Control
-- [ ] PID class
-- [ ] anti-windup
+- [x] PID class — `fsoc_control` lib (OpenCV-free, `fsoc::core` only), `PIDController`
+- [x] `ControlCommand` (pan/tilt rate in rad/s) + `zero_control_command()`
+- [x] independent pan/tilt axes; `u = kp*e + ki*I + kd*D` on angular error
+- [x] derivative forced to 0 on first update after construction/reset
+- [x] anti-windup — integral hard clamp + conditional integration; output clamp
+- [x] `reset()` clears integral / previous error / first-sample flags
+- [x] validation — bad `dt_s` / config / non-finite `TrackingError` -> `std::invalid_argument`
 - [ ] closed-loop runner
 
 ## Evidence

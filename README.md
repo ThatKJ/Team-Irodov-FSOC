@@ -90,6 +90,25 @@ For the first 48-hour MVP:
   RIGHT+ABOVE → pan > 0, tilt > 0
 - `step5_detector_smoke` (headless, `std::chrono` timing for curiosity) + `fsoc_step5_tests`
 
+## Step 6 implemented — pan/tilt PID controller
+
+- new `fsoc_control` library depending on **`fsoc::core` only** (via `fsoc/tracking_error.hpp`);
+  **OpenCV-free** — links no OpenCV / `fsoc_render` / `fsoc_perception`, builds without OpenCV
+- `PIDController::update(const TrackingError&, double dt_s) -> ControlCommand` — angular
+  error (radians) in, pan/tilt **rate** (rad/s) out; never absolute angles, never touches
+  `PanTiltCamera`
+- two independent axes, standard discrete PID `u = kp·e + ki·I + kd·D` on `angular.pan_rad`
+  / `angular.tilt_rad`; derivative forced to 0 on the first update after construction/`reset()`
+- anti-windup: integral hard-clamped to ±`integral_limit` + conditional integration; output
+  clamped to ±`output_limit_rad_s`
+- `reset()` clears integrals / previous errors / first-sample flags; `zero_control_command()`
+  helper for the runner's target-loss path
+- rejects non-finite / ≤0 `dt_s` and non-finite `TrackingError` with `std::invalid_argument`
+  (state untouched on throw); invalid config rejected at construction
+- sign preserved: `e > 0` (RIGHT / ABOVE) → command > 0 (PAN RIGHT / TILT UP)
+- default gains are **untuned placeholders** (tuned in Step 7)
+- `step6_pid_smoke` (5 scenarios + toy scalar-plant sanity) + `fsoc_step6_tests`
+
 ## macOS quick start
 
 ```bash
@@ -105,6 +124,7 @@ ctest --preset debug
 ./build/debug/step3_observation_smoke
 ./build/debug/step4_renderer_smoke
 ./build/debug/step5_detector_smoke
+./build/debug/step6_pid_smoke
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

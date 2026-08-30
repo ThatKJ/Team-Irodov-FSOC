@@ -128,3 +128,38 @@ Step 5 adds the first perception path. Key decisions:
 - **Lost target = `std::nullopt`** (Step-3 contract). Frame validation rejects empty and
   non-`CV_8UC1` inputs with `std::invalid_argument` rather than reinterpreting them.
 - CMake `find_package(OpenCV)` components extended to `core imgproc imgcodecs` (no highgui).
+
+## ADR-009 — Pan/tilt PID controller: `fsoc_control`, OpenCV-free, angular-error in / rate out
+**Status:** Accepted
+
+Step 6 adds the first control law. Key decisions:
+
+- **Separate `fsoc_control` library** depending on **`fsoc::core` only** (via
+  `fsoc/tracking_error.hpp`). OpenCV-free by construction — it links no OpenCV, `fsoc_render`,
+  or `fsoc_perception`, and includes no `opencv2/*`. Dependency direction: `control -> core`.
+  It builds even when OpenCV is absent (unlike Steps 4/5).
+- **Input is `TrackingError.angular` (radians), never pixels.** Controlling on angle makes
+  the loop independent of image resolution, focal length, and FOV. `update()` also gets
+  `dt_s`; nothing from the truth/perception layers may bypass `TrackingError`.
+- **Output is `ControlCommand` = pan/tilt RATE in rad/s**, never absolute angles. The PID
+  never touches `PanTiltCamera`; actuation is Step 7. `zero_control_command()` is provided
+  for the runner's target-loss path — the PID has no notion of "lost".
+- **Standard discrete PID per independent axis:** `u = kp·e + ki·I + kd·D`,
+  `I += e·dt`, `D = (e − e_prev)/dt`. **Derivative is forced to 0 on the first update after
+  construction/`reset()`** so an undefined previous sample cannot produce a kick. No
+  derivative low-pass filtering in the baseline (no demonstrated need yet).
+- **Anti-windup = bounded integrator + conditional integration.** `I` is hard-clamped to
+  `±integral_limit` every update; additionally, a sample that would only push an
+  already-saturated command further into saturation is not accumulated. This keeps `I`
+  bounded and lets it unwind immediately once the error reverses — no back-calculation
+  needed. Output is clamped to `±output_limit_rad_s`.
+- **Sign is preserved, not inverted:** `e > 0` (RIGHT / ABOVE) with `kp > 0` gives
+  `command > 0` (PAN RIGHT / TILT UP), matching the frozen `TrackingError` convention and
+  `PanTiltCamera::step`.
+- **Validation throws before mutating state:** non-finite / `≤ 0` `dt_s` and any non-finite
+  `TrackingError` component raise `std::invalid_argument` with the controller state
+  untouched; invalid config raises at construction.
+- **Default gains are explicitly untuned placeholders** (`kp=1.5, ki=0.2, kd=0.05`,
+  `integral_limit=0.5`, `output_limit_rad_s=deg_to_rad(30)`), to be tuned in Step 7. The
+  PID never reads `CameraConfig`; the Step-7 runner keeps controller/actuator limits aligned.
+- `PIDController::Axis` is a private nested helper, not a public reusable contract.
