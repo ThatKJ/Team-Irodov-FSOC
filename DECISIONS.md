@@ -271,3 +271,50 @@ Step 9 adds the engineering camera-view visualization. Key decisions:
 - Colour semantics are fixed (green = tracking, red = lost, amber = saturation, grey =
   neutral, cyan = optional truth); HUD is degrees for humans while physics stays radians.
 - No 3D scene / FOV cone / telemetry graphs here — those belong in the future frontend.
+
+## ADR-013 — Baseline acceptance is an evaluation layer with gates frozen up front (`fsoc_validation`)
+**Status:** Accepted
+
+Step 10 adds the baseline acceptance / validation suite — the last gate before a
+`v1_baseline` freeze. Key decisions:
+
+- **`fsoc_validation` is an EVALUATION layer, not a component.** It links
+  `fsoc::simulation` + `fsoc::telemetry` + `fsoc::visualization`, runs the *existing* v1
+  system across named deterministic scenarios, and reads the results. It implements **no**
+  trajectory / detector / PID / renderer / camera / pixel→angle math, never enters a
+  control path, never advances the loop itself. The only "domain" call it makes is
+  constructing a `Trajectory` for a named scenario. Steps 1–9 sources are byte-for-byte
+  unchanged (verified with `git diff`).
+- **Acceptance thresholds are defined and justified BEFORE evaluation**, in the committed
+  `docs/16_BASELINE_ACCEPTANCE.md`, and are **never** derived from the run being scored.
+  When a scenario fails, the suite reports it; it does **not** loosen a gate, retry with
+  different gains, or tune the controller. The baseline PID stays **kp = 12, ki = 0,
+  kd = 0** (ADR-010) — Step 10 changes no algorithm to improve a number.
+- **Seven scenarios**, each chosen for a distinct property: A static acquisition (coarse
+  alignment — the core product proof), B slow linear (continual tracking), C sinusoidal
+  (nonlinear target), D near-FOV-edge acquisition (operational boundary), E actuator
+  saturation (correct behaviour *while* rate-limited), F target loss and re-entry
+  (explicit lost-target semantics + safe recovery, **not** tracking quality — its low
+  detection fraction is expected), G open vs closed loop (proves the controller adds
+  value). D and E gate on convergence / final error / limit-compliance, not whole-run RMS,
+  because the acquisition transient inflates RMS by design.
+- **Global checks on every scenario:** finite values (no NaN/Inf), strictly monotonic
+  timestamps, fixed-dt deviation ≤ 1e-9 s, command rate ≤ PID output limit, applied rate ≤
+  camera actuator limit, and target-loss semantics (zero command / no `TrackingError` /
+  `TargetLost` / empty measurement optionals on every lost frame).
+- **Determinism is checked, not assumed.** Each scenario runs twice through independent
+  `SimulationRunner`s; the two `BenchmarkMetrics` (excluding wall-clock/FPS) and the two
+  `SimulationStepResult` sequences must be bit-identical. The simulation has no RNG.
+- **The evaluator is provably able to fail.** `test_failure_check_is_real` (mandatory)
+  injects an impossible `AcceptanceCheck` and, separately, tightens a real threshold past
+  its measured value, and asserts that `evaluate_passed()` and
+  `ValidationSuiteResult::overall_passed` both go `false`. Step 10 is not a decorative
+  always-green harness.
+- **Evidence uses existing observer paths only.** Per-scenario CSV via the Step-8
+  `CsvTelemetryLogger`; annotated PNGs via the Step-9
+  `SyntheticCameraRenderer` + `TrackingVisualizer::annotate()` path — no drawing or
+  logging code is re-implemented. `generated/step10/VALIDATION_REPORT.md` is generated
+  from the run (values never hardcoded). All artifacts land in `generated/step10/`
+  (git-ignored); `docs/16_BASELINE_ACCEPTANCE.md` is the one committed Step-10 document.
+- **The `v1_baseline` tag/branch is NOT created by Step 10.** The suite passing only
+  *recommends* the freeze; creating the tag is a separate, explicitly instructed step.

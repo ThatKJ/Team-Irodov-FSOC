@@ -67,7 +67,17 @@
 - [x] overlays: crosshair / detection marker / error vector / status / HUD (attitude, errors, rates, SAT)
 - [x] headless PNG sequence (required) + optional best-effort MP4; output -> generated/step9/
 - [x] `step9_visualization_smoke` — static acquisition + sinusoidal + target-lost frames
-- [ ] freeze `v1_baseline`
+
+## Baseline acceptance
+- [x] `fsoc_validation` lib — evaluation layer over `fsoc::simulation` + `telemetry` + `visualization`; no domain math, never controls the loop
+- [x] acceptance gates frozen up front in `docs/16_BASELINE_ACCEPTANCE.md` (not derived from the scored run); baseline PID unchanged (kp=12, ki=0, kd=0)
+- [x] 7 named scenarios — static / slow-linear / sinusoidal / near-FOV-edge / actuator-saturation / target-loss+re-entry / open-vs-closed
+- [x] per-scenario global checks — finite (no NaN/Inf), monotonic timestamps, fixed dt, command <= PID limit, applied <= actuator limit, target-loss semantics
+- [x] determinism — every scenario run twice, metrics + `SimulationStepResult` sequence bit-identical
+- [x] MANDATORY failure-check test — impossible gate + tightened real threshold -> `evaluate_passed()` and `overall_passed` both false
+- [x] `step10_validation_smoke` — judge table + CSV/PNG evidence + `generated/step10/VALIDATION_REPORT.md`; ends `STEP 10 BASELINE ACCEPTANCE: PASS` (7/7)
+- [x] baseline acceptance metrics met — static 4.13 deg -> 0.00 deg, sinusoidal RMS 0.55 deg, open->closed detection 57.4% -> 100%, RMS x11.8
+- [ ] freeze `v1_baseline` — recommended; create tag/branch only on explicit instruction
 
 ## Post-baseline
 - [ ] Eigen-backed UKF

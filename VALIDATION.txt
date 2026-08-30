@@ -193,6 +193,50 @@ C++20, OpenCV 5.0.0 incl. videoio):
 - ASan/UBSan build: PASS (all 9 test executables + step8/step9 smokes, no findings)
 - Step 1-8 regression: step1_math_smoke still ~0.001 deg; step2-8 smokes unchanged
 
+Step 10 - baseline acceptance / validation suite (CMake 4.4 / Ninja / Apple clang,
+C++20, OpenCV 5.0.0):
+- CMake configure/build: PASS, no new project warnings; new fsoc_validation library
+  links fsoc::simulation + fsoc::telemetry + fsoc::visualization. EVALUATION layer:
+  it runs the existing v1 system and reads outputs; it implements no trajectory /
+  detector / PID / renderer / camera math (grep of src/validation.cpp: it constructs
+  SimulationRunner + run_and_record + compute_benchmark_metrics, and uses
+  SyntheticCameraRenderer + TrackingVisualizer only on the Step-9 observer path for
+  evidence frames). Step 1-9 sources byte-for-byte unchanged (git diff --name-only
+  HEAD -- src include apps/step[1-9]* tests/step[1-9]* -> empty).
+- Acceptance gates frozen BEFORE evaluation in docs/16_BASELINE_ACCEPTANCE.md; not
+  derived from the run being scored. Baseline PID unchanged: kp=12, ki=0, kd=0.
+- CTest: PASS (10 executables) - fsoc_step1..10_tests
+- fsoc_step10_tests: PASS (10 checks): nominal scenarios (static/linear/sinusoidal)
+  pass every gate; near-FOV-edge starts inside FOV + command points at target +
+  converges; actuator saturation actually saturates (>2 frames) yet max command <=
+  PID limit and max applied <= actuator limit, comes off the limit, error still
+  reduced; target loss/re-entry has T->L and L->T transitions, zero command + held
+  pose while lost, control resumes after reacquire; closed loop beats open loop
+  (RMS factor >= 3, detection +>= 20 pts; actual 11.8x / +42.6 pts); every scenario
+  finite + monotonic timestamps + fixed dt + within limits; every scenario
+  deterministic on replay + two independent suites give identical metrics; MANDATORY
+  failure check - inject an impossible gate and tighten a real threshold past its
+  actual value -> evaluate_passed() false and suite overall_passed false (the
+  evaluator is not always-green); suite shape 7 scenarios + overall == all-passed;
+  Step 1-9 regression assertions (camera.project, LinearTrajectory, observe_beacon,
+  PID sign, SimulationRunner+run_and_record 150 frames final < 0.05 deg, baseline
+  gains 12/0/0).
+- step10_validation_smoke: PASS - 7 / 7 scenarios PASS. Static Acquisition 100% /
+  RMS 0.4691 deg / P95 0.2885 / max 4.1275 / 0 lost; Slow Linear 100% / 0.3908 /
+  0.1028 / 4.8863 / 0; Sinusoidal 100% / 0.5461 / 0.7899 / 0.7982 / 0; Near-FOV-Edge
+  100% / 1.5613 / 2.8305 / 9.9273 / 0; Actuator Saturation 100% / 1.8189 / 3.2724 /
+  11.3779 / 0; Target Loss and Re-entry 73.2% / 4.9328 / 8.8284 / 9.9692 / 107 lost
+  (loss-semantics scenario, not a tracking-quality gate); Open vs Closed 100% /
+  0.5461 / 0.7899 / 0.7982 / 0. OPEN vs CLOSED: detection 57.4% -> 100.0% (+42.6
+  pts), RMS 6.4549 -> 0.5461 deg (x11.8), lost 426 -> 0. Ends
+  "STEP 10 BASELINE ACCEPTANCE: PASS" (exit 0). Suite wall time ~2.5 s
+  (informational; simulation is fixed 50 Hz).
+- Generated evidence (generated/step10/, git-ignored): VALIDATION_REPORT.md +
+  8 per-scenario 27-col CSVs + 19 annotated PNGs (28 files). Report values are
+  generated from the run, not hardcoded; overall verdict "BASELINE ACCEPTANCE: PASS".
+- ASan/UBSan build: PASS (all 10 test executables + step9/step10 smokes, no findings)
+- Step 1-9 regression: step1_math_smoke still ~0.001 deg; step2-9 smokes unchanged
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -207,3 +251,4 @@ macOS target workflow:
   ./build/debug/step7_closed_loop_smoke
   ./build/debug/step8_telemetry_smoke
   ./build/debug/step9_visualization_smoke
+  ./build/debug/step10_validation_smoke

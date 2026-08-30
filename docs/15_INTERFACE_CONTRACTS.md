@@ -268,3 +268,52 @@ Layers stay distinct — do not alias them:
   → `generated/` (git-ignored); no images committed.
 - `VisualizationConfig` gates every overlay independently; all off → `annotate()` returns a
   plain `cvtColor(GRAY2BGR)` of the input.
+
+## Baseline validation contract (Step 10, frozen)
+
+- **Evaluation layer, not a component.** `fsoc_validation` (`fsoc/validation.hpp` +
+  `src/validation.cpp`) depends on `fsoc::simulation` + `fsoc::telemetry` +
+  `fsoc::visualization`. It **runs the existing v1 system and reads its outputs**. It
+  implements **no** trajectory / detector / PID / renderer / camera / pixel→angle math,
+  never calls a control path, never advances the loop itself, and never mutates a
+  `SimulationRunnerConfig` to make a number look better. Creating a `Trajectory` for a
+  named scenario is the only "domain" thing it does. Steps 1–9 sources are unchanged.
+- **Acceptance gates are frozen before the run.** Every threshold is defined and justified
+  in `docs/16_BASELINE_ACCEPTANCE.md` ahead of evaluation; none is computed from the run
+  being scored. The suite reports a failing scenario — it does **not** loosen a gate, retry
+  with different gains, or re-tune the controller. The baseline PID stays kp = 12, ki = 0,
+  kd = 0 (ADR-010).
+- **API.** `ValidationScenarioId` (7 values, `to_string`); `AcceptanceCheck {name, passed,
+  actual, limit, unit, comparator}`; `ValidationResult {id, scenario_name, description,
+  BenchmarkMetrics metrics, vector<AcceptanceCheck> checks, bool passed, bool deterministic,
+  csv_path, evidence_images, open_loop_metrics, has_open_loop_comparison}`;
+  `ValidationSuiteResult {vector<ValidationResult> scenarios, bool overall_passed}`.
+  `evaluate_passed(result)` ⇔ every check in `result.checks` passed; `overall_passed` ⇔
+  every scenario `passed` (`std::all_of`). `ValidationSuite{evidence_dir}` — `run_all()`
+  plus one `run_*()` per scenario; an **empty** `evidence_dir` runs the scenarios with no
+  CSV/PNG/report I/O (used by the unit tests). `write_report(result)` emits
+  `<evidence_dir>/VALIDATION_REPORT.md`.
+- **Global checks appended to every scenario** (`global_acceptance_checks`): frame count
+  > 0; timestamps strictly monotonic; `max |t[i] − i·dt| ≤ 1e-9 s`; every telemetry scalar
+  / present optional finite (no NaN/Inf); `max |command rate| ≤ PID output limit`;
+  `max |applied rate| ≤ camera actuator limit`; target-loss semantics (every lost frame:
+  zero command, no `TrackingError`, `TrackingState::TargetLost`, measurement optionals
+  empty).
+- **Determinism.** Each scenario is run twice through an independent `SimulationRunner`;
+  `deterministic` ⇔ the two `BenchmarkMetrics` (excluding wall-clock / FPS) **and** the two
+  `SimulationStepResult` sequences are bit-identical. The simulation carries no RNG.
+- **The evaluator can fail.** `test_failure_check_is_real` (mandatory) injects an impossible
+  `AcceptanceCheck` and, separately, tightens a real threshold past its measured value, and
+  asserts `evaluate_passed()` and `ValidationSuiteResult::overall_passed` both become
+  `false`. Step 10 is not a decorative always-green harness.
+- **Evidence.** Per-scenario 27-column `TelemetryRecord` CSV via `CsvTelemetryLogger`;
+  annotated PNGs via the Step-9 observer path only —
+  `SyntheticCameraRenderer{config.renderer}.render(result.observation)` for the base frame,
+  then `TrackingVisualizer::annotate()` — no drawing code is re-implemented.
+  `VALIDATION_REPORT.md` values are generated from the run, never hardcoded. All artifacts
+  go to `generated/step10/` (git-ignored); `docs/16_BASELINE_ACCEPTANCE.md` is the only
+  committed Step-10 evidence document.
+- **`step10_validation_smoke`** ends with exactly `STEP 10 BASELINE ACCEPTANCE: PASS`
+  (exit 0) iff `overall_passed && report written`, otherwise
+  `STEP 10 BASELINE ACCEPTANCE: FAIL` (exit 1). Suite wall time is printed as
+  informational only — no ephemeral FPS figure is a permanent gate.

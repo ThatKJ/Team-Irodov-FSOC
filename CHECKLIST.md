@@ -21,6 +21,6 @@
 - [x] Rate saturation telemetry — `pan_saturated` / `tilt_saturated` + `command_saturation_fraction` benchmark metric
 - [x] Parameterized benchmark scenarios — static / linear / sinusoidal closed / sinusoidal open, `BenchmarkMetrics` (RMS / P95 / max)
 - [x] OpenCV visualization — `fsoc_visualization`, observer-only `TrackingVisualizer` (CV_8UC1 -> annotated CV_8UC3), headless PNG/MP4 export
-- [ ] Plot/export telemetry for judging
-- [ ] Baseline acceptance metrics met
-- [ ] Freeze `v1_baseline`
+- [x] Plot/export telemetry for judging — `fsoc_validation` suite writes per-scenario 27-col CSV + annotated PNG + `generated/step10/VALIDATION_REPORT.md` + judge-friendly summary table
+- [x] Baseline acceptance metrics met — 7/7 scenarios PASS (Static / Slow-Linear / Sinusoidal / Near-FOV-Edge / Actuator-Saturation / Loss-and-Re-entry / Open-vs-Closed); gates frozen in `docs/16_BASELINE_ACCEPTANCE.md`; `step10_validation_smoke` prints `STEP 10 BASELINE ACCEPTANCE: PASS`
+- [ ] Freeze `v1_baseline` — recommended; awaiting explicit go-ahead to create the tag/branch

@@ -164,12 +164,37 @@ frame). `step9_visualization_smoke` writes 28 PNGs + 2 MP4s; static story visual
 0.00 deg / 0 deg/s), lost frame shows TARGET LOST with no fake marker or vector. Steps 1-8
 unchanged.
 
-## Hours 43–46 — Step 10: Validation scenarios
-- slow linear
-- sinusoidal
-- near-FOV-edge acquisition
-- actuator saturation
-- target loss/re-entry
+## Hours 43–46 — Step 10: Baseline acceptance / validation suite [DONE]
+- new `fsoc_validation` library (links `fsoc::simulation` + `fsoc::telemetry` +
+  `fsoc::visualization`) — an EVALUATION layer. Runs the existing v1 system across seven
+  named deterministic scenarios and checks acceptance gates; implements NO trajectory /
+  detector / PID / renderer / camera math, never controls the loop, never tunes the
+  controller or loosens a gate to improve a number. Baseline PID unchanged (kp=12, ki=0,
+  kd=0).
+- gates frozen up front in `docs/16_BASELINE_ACCEPTANCE.md` — documented, physically
+  justified, NOT derived from the run being scored
+- scenarios: A static acquisition, B slow linear, C sinusoidal, D near-FOV-edge
+  acquisition, E actuator saturation, F target loss/re-entry, G open loop vs closed loop
+- per-scenario global checks: finite (no NaN/Inf), monotonic timestamps, fixed dt,
+  command rate <= PID limit, applied rate <= actuator limit, target-loss semantics,
+  deterministic replay (second independent run bit-identical)
+- MANDATORY failure-check test: inject an impossible gate + tighten a real threshold past
+  its actual value -> `evaluate_passed()` false and suite `overall_passed` false (not an
+  always-green harness)
+- `step10_validation_smoke` writes CSV + annotated PNG evidence +
+  `generated/step10/VALIDATION_REPORT.md` (values generated from the run) and a
+  judge-friendly table; ends `STEP 10 BASELINE ACCEPTANCE: PASS`
+
+Gate: every check of every scenario passes and prior steps still green. PASSED —
+`fsoc_step10_tests` green (10 checks incl. the failure-check test). 7 / 7 scenarios PASS:
+static acquisition 4.1275 deg -> 0.0000 deg, 100% detection; slow linear RMS 0.3908 deg;
+sinusoidal RMS 0.5461 deg / P95 0.7899 / max 0.7982; near-FOV-edge starts inside FOV and
+converges (final < 0.10 deg); actuator saturation stays within command <= PID limit and
+applied <= actuator limit, comes off the limit, error still reduced; target loss/re-entry
+has T->L and L->T transitions with zero command + held pose while lost and control
+resuming after reacquire (73.2% detection is expected for this loss-semantics scenario);
+open vs closed detection 57.4% -> 100.0% (+42.6 pts), RMS 6.4549 -> 0.5461 deg (x11.8).
+ASan/UBSan clean. Steps 1-9 sources byte-for-byte unchanged.
 
 ## Hours 46–48 — Step 11: Demo freeze
 - benchmark run

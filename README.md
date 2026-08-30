@@ -177,6 +177,34 @@ For the first 48-hour MVP:
   vector / 30°/s + `RATE LIMIT` → final: beacon on crosshair / 0.00° / 0°/s)
 - `step9_visualization_smoke` (static / sinusoidal / target-lost) + `fsoc_step9_tests`
 
+## Step 10 implemented — baseline acceptance / validation suite
+
+- new `fsoc_validation` library (links `fsoc::simulation` + `fsoc::telemetry` +
+  `fsoc::visualization`) — an **evaluation layer**. It runs the *existing* v1 system across
+  seven named deterministic scenarios and checks acceptance gates; it implements **no**
+  trajectory / detector / PID / renderer / camera math and never controls the loop or
+  changes an algorithm to improve a number
+- **gates are frozen up front** in `docs/16_BASELINE_ACCEPTANCE.md` — physically justified,
+  documented, **not** derived from the run being scored. Baseline PID stays **kp = 12,
+  ki = 0, kd = 0**
+- scenarios: **A** Static Acquisition · **B** Slow Linear Tracking · **C** Sinusoidal
+  Tracking · **D** Near-FOV-Edge Acquisition · **E** Actuator Saturation · **F** Target
+  Loss and Re-entry · **G** Open Loop vs Closed Loop
+- per-scenario global checks: finite values (no NaN/Inf), monotonic timestamps, fixed dt,
+  command rate ≤ PID limit, applied rate ≤ actuator limit, target-loss semantics, and a
+  **deterministic-replay** check (a second independent run is bit-identical)
+- a **mandatory failure-check test** injects an impossible gate and tightens a real
+  threshold past its actual value and confirms the evaluator then reports FAIL — it is not
+  an always-green harness
+- `step10_validation_smoke` prints a judge-friendly table, writes CSV + annotated PNG
+  evidence and `generated/step10/VALIDATION_REPORT.md` (values generated from the run, not
+  hardcoded), and ends with `STEP 10 BASELINE ACCEPTANCE: PASS` — **7 / 7 scenarios pass**
+  (static 4.13° → 0.00°; sinusoidal RMS 0.55°; open→closed detection 57.4 % → 100 %, RMS
+  6.45° → 0.55°, ×11.8). `fsoc_step10_tests` green (10 checks)
+- generated evidence → `generated/step10/` (git-ignored); the canonical gate definitions
+  live in `docs/16_BASELINE_ACCEPTANCE.md` (committed). The `v1_baseline` tag is **not**
+  created automatically — Step 10 only *recommends* the freeze
+
 ## macOS quick start
 
 ```bash
@@ -196,6 +224,7 @@ ctest --preset debug
 ./build/debug/step7_closed_loop_smoke
 ./build/debug/step8_telemetry_smoke      # writes generated/step8_*.csv
 ./build/debug/step9_visualization_smoke  # writes generated/step9/*.png (+ optional .mp4)
+./build/debug/step10_validation_smoke    # baseline acceptance; writes generated/step10/
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

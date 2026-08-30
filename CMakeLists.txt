@@ -212,6 +212,29 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(step9_visualization_smoke PRIVATE fsoc::visualization)
     fsoc_set_project_warnings(step9_visualization_smoke)
     fsoc_enable_sanitizers(step9_visualization_smoke)
+
+    # -----------------------------------------------------------------------
+    # fsoc_validation — baseline acceptance / validation suite (Step 10).
+    # Evaluation layer: runs the existing system, checks documented gates.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_validation src/validation.cpp)
+    add_library(fsoc::validation ALIAS fsoc_validation)
+    target_include_directories(fsoc_validation
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_validation PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_validation
+        PUBLIC fsoc::simulation fsoc::telemetry fsoc::visualization)
+    fsoc_set_project_warnings(fsoc_validation)
+    fsoc_enable_sanitizers(fsoc_validation)
+
+    add_executable(step10_validation_smoke apps/step10_validation_smoke.cpp)
+    target_link_libraries(step10_validation_smoke PRIVATE fsoc::validation)
+    fsoc_set_project_warnings(step10_validation_smoke)
+    fsoc_enable_sanitizers(step10_validation_smoke)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -271,5 +294,11 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step9_tests)
         fsoc_enable_sanitizers(fsoc_step9_tests)
         add_test(NAME fsoc_step9_tests COMMAND fsoc_step9_tests)
+
+        add_executable(fsoc_step10_tests tests/step10_tests.cpp)
+        target_link_libraries(fsoc_step10_tests PRIVATE fsoc::validation)
+        fsoc_set_project_warnings(fsoc_step10_tests)
+        fsoc_enable_sanitizers(fsoc_step10_tests)
+        add_test(NAME fsoc_step10_tests COMMAND fsoc_step10_tests)
     endif()
 endif()
