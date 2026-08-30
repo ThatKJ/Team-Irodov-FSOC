@@ -10,17 +10,17 @@
 - [x] Terminal math smoke test
 - [x] Trajectory interface + stationary + linear trajectory
 - [x] Sinusoidal trajectory
-- [ ] Synthetic grayscale beacon renderer (OpenCV C++)
-- [ ] Threshold + centroid detector
-- [ ] Measurement/error data contracts
-- [ ] Independent pan/tilt PID controller
-- [ ] Closed-loop SimulationRunner
-- [ ] Telemetry logger
-- [ ] FPS and timing measurement
-- [ ] Target-loss behavior
-- [ ] Rate saturation telemetry
-- [ ] Parameterized benchmark scenarios
-- [ ] OpenCV visualization
-- [ ] Plot/export telemetry for judging
-- [ ] Baseline acceptance metrics met
-- [ ] Freeze `v1_baseline`
+- [x] Measurement/error data contracts (observation / detection / tracking-error, frozen sign conventions)
+- [x] Synthetic grayscale beacon renderer (OpenCV C++) — CV_8UC1, sub-pixel Gaussian beacon
+- [x] Threshold + centroid detector — connected-components + intensity-weighted centroid, ~0.02 px on clean frames
+- [x] Independent pan/tilt PID controller — `fsoc_control` (OpenCV-free), angular error -> rate command, anti-windup, reset
+- [x] Closed-loop SimulationRunner — `fsoc_simulation`, deterministic fixed-step, pixel-only feedback, static acq final error ~0 deg
+- [x] Telemetry logger — `fsoc_telemetry`, observer-only `TelemetryRecord` + synchronous `CsvTelemetryLogger` (27 cols)
+- [x] FPS and timing measurement — `std::chrono` wall clock, separate from the fixed sim dt (~4700 FPS, ~90x real time)
+- [x] Target-loss behavior — no detection -> PID reset + zero command + camera holds (no search mode)
+- [x] Rate saturation telemetry — `pan_saturated` / `tilt_saturated` + `command_saturation_fraction` benchmark metric
+- [x] Parameterized benchmark scenarios — static / linear / sinusoidal closed / sinusoidal open, `BenchmarkMetrics` (RMS / P95 / max)
+- [x] OpenCV visualization — `fsoc_visualization`, observer-only `TrackingVisualizer` (CV_8UC1 -> annotated CV_8UC3), headless PNG/MP4 export
+- [x] Plot/export telemetry for judging — `fsoc_validation` suite writes per-scenario 27-col CSV + annotated PNG + `generated/step10/VALIDATION_REPORT.md` + judge-friendly summary table
+- [x] Baseline acceptance metrics met — 7/7 scenarios PASS (Static / Slow-Linear / Sinusoidal / Near-FOV-Edge / Actuator-Saturation / Loss-and-Re-entry / Open-vs-Closed); gates frozen in `docs/16_BASELINE_ACCEPTANCE.md`; `step10_validation_smoke` prints `STEP 10 BASELINE ACCEPTANCE: PASS`
+- [ ] Freeze `v1_baseline` — recommended; awaiting explicit go-ahead to create the tag/branch

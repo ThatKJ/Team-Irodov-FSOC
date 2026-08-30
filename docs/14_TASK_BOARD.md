@@ -15,23 +15,69 @@
 - [x] sinusoidal trajectory with analytic velocity
 - [x] deterministic analytic tests + smoke
 
+## Observation / measurement contracts
+- [x] `ImagePoint` + frozen image convention (origin top-left, +x right, +y down)
+- [x] `CameraObservation` / `ObservationStatus` (Visible / OutsideFieldOfView / BehindCamera)
+- [x] `observe_beacon()` reuses `PanTiltCamera::project()` (no duplicated projection math)
+- [x] `BeaconDetection` (centroid only; no fabricated confidence)
+- [x] `PixelError` / `AngularError` / `TrackingError` with frozen sign conventions
+- [x] `compute_tracking_error()` — `std::optional` in / out, non-finite rejected
+- [x] `ScenarioConfig` data contract (mode, duration_s, fixed timestep_s)
+
 ## Perception baseline
-- [ ] OpenCV renderer
-- [ ] threshold detector
-- [ ] centroid
-- [ ] loss state
+- [x] OpenCV renderer — `fsoc_render` lib (isolated), `SyntheticCameraRenderer`
+- [x] CV_8UC1 grayscale, background + sub-pixel Gaussian beacon (sigma in px)
+- [x] edge-safe clipped raster window; non-Visible -> background-only
+- [x] test-only weighted-centroid recovers requested sub-pixel location
+- [x] threshold detector — `fsoc_perception` lib, `BeaconDetector` (pixels only, no renderer dep)
+- [x] centroid — 8-connected components + intensity-weighted centroid, `weight=(pixel-threshold)+1`
+- [x] strongest-integrated-signal component selection (deterministic tie-break)
+- [x] loss state — `std::nullopt` on no bright pixels / no component >= min size
+- [x] input validation — empty / non-CV_8UC1 rejected with `std::invalid_argument`
 
 ## Control
-- [ ] PID class
-- [ ] anti-windup
-- [ ] closed-loop runner
+- [x] PID class — `fsoc_control` lib (OpenCV-free, `fsoc::core` only), `PIDController`
+- [x] `ControlCommand` (pan/tilt rate in rad/s) + `zero_control_command()`
+- [x] independent pan/tilt axes; `u = kp*e + ki*I + kd*D` on angular error
+- [x] derivative forced to 0 on first update after construction/reset
+- [x] anti-windup — integral hard clamp + conditional integration; output clamp
+- [x] `reset()` clears integral / previous error / first-sample flags
+- [x] validation — bad `dt_s` / config / non-finite `TrackingError` -> `std::invalid_argument`
+
+## Closed-loop integration
+- [x] `fsoc_simulation` lib — `SimulationRunner` wires trajectory -> observe -> render ->
+      detect -> tracking error -> PID -> camera.step (the one integration layer)
+- [x] deterministic fixed-step (dt = 0.02 s, 50 Hz); `step()` + `run_for()` + `reset()`
+- [x] `SimulationStepResult` (truth fields labelled; control path never reads them)
+- [x] pixel-only feedback verified — control follows detected centroid, not projection truth
+- [x] target-loss policy — PID reset + zero command + camera holds; reappearance resumes
+- [x] `SimulationMetrics` + `evaluate()` (detection %, RMS/max/final angular error, lost frames)
+- [x] open- vs closed-loop comparison (`control_enabled`)
+- [x] empirically-tuned MVP baseline gains (kp=12, ki=0, kd=0)
 
 ## Evidence
-- [ ] telemetry CSV
-- [ ] performance metrics
-- [ ] scenario suite
-- [ ] demo overlay
-- [ ] freeze `v1_baseline`
+- [x] telemetry CSV — `fsoc_telemetry` lib; `TelemetryRecord` (27 cols) + `CsvTelemetryLogger`
+- [x] observer-only, non-interference proven (with/without telemetry -> identical results)
+- [x] performance metrics — `BenchmarkMetrics` (RMS/mean/max/final/P95 angular, pixel error,
+      saturation fractions, rates); wall clock via `std::chrono`, separate from sim dt
+- [x] scenario suite — static / linear / sinusoidal closed / sinusoidal open benchmarks
+- [x] `step8_telemetry_smoke` writes generated/step8_*.csv + prints the comparison table
+- [x] demo overlay — `fsoc_visualization` lib; `TrackingVisualizer` (CV_8UC1 -> annotated CV_8UC3)
+- [x] observer-only, perception frame never touched; mandatory non-interference test passed
+- [x] overlays: crosshair / detection marker / error vector / status / HUD (attitude, errors, rates, SAT)
+- [x] headless PNG sequence (required) + optional best-effort MP4; output -> generated/step9/
+- [x] `step9_visualization_smoke` — static acquisition + sinusoidal + target-lost frames
+
+## Baseline acceptance
+- [x] `fsoc_validation` lib — evaluation layer over `fsoc::simulation` + `telemetry` + `visualization`; no domain math, never controls the loop
+- [x] acceptance gates frozen up front in `docs/16_BASELINE_ACCEPTANCE.md` (not derived from the scored run); baseline PID unchanged (kp=12, ki=0, kd=0)
+- [x] 7 named scenarios — static / slow-linear / sinusoidal / near-FOV-edge / actuator-saturation / target-loss+re-entry / open-vs-closed
+- [x] per-scenario global checks — finite (no NaN/Inf), monotonic timestamps, fixed dt, command <= PID limit, applied <= actuator limit, target-loss semantics
+- [x] determinism — every scenario run twice, metrics + `SimulationStepResult` sequence bit-identical
+- [x] MANDATORY failure-check test — impossible gate + tightened real threshold -> `evaluate_passed()` and `overall_passed` both false
+- [x] `step10_validation_smoke` — judge table + CSV/PNG evidence + `generated/step10/VALIDATION_REPORT.md`; ends `STEP 10 BASELINE ACCEPTANCE: PASS` (7/7)
+- [x] baseline acceptance metrics met — static 4.13 deg -> 0.00 deg, sinusoidal RMS 0.55 deg, open->closed detection 57.4% -> 100%, RMS x11.8
+- [ ] freeze `v1_baseline` — recommended; create tag/branch only on explicit instruction
 
 ## Post-baseline
 - [ ] Eigen-backed UKF

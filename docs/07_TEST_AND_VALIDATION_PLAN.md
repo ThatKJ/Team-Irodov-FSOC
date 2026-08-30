@@ -11,6 +11,10 @@
 - tilt mechanical clamp
 - invalid timestep rejection
 - pixel-to-angle sign convention
+- image centre = width/2.0, height/2.0 (float)
+- tracking-error signs in all four quadrants (right/left/above/below -> pan/tilt)
+- observation classification: visible / outside-FOV / behind-camera
+- non-finite detection centroid rejected; lost target -> no tracking error
 - trajectory analytic samples
 - PID P/I/D terms and clamps
 - lost-target behavior

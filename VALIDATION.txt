@@ -20,9 +20,235 @@ Step 2 — target trajectory engine (CMake 4.4 / Ninja / Apple clang, C++20):
   y(t=1 s) = 10.000 m, vy = 0.000 m/s, vz = -6.283 m/s)
 - Step 1 regression: step1_math_smoke still PASS, final pointing error ~0.001 deg
 
+Step 3 — observation / measurement / tracking-error contracts (CMake 4.4 / Ninja /
+Apple clang, C++20):
+- CMake configure: PASS
+- C++ compile/link: PASS, no new project warnings (same flag set as Step 2)
+- CTest: PASS (3 executables) — fsoc_step1_tests + fsoc_step2_tests + fsoc_step3_tests
+- fsoc_step3_tests: PASS (15 checks): image centre = W/2.0,H/2.0; centred -> zero error;
+  all four quadrants right/left/above/below -> correct pan/tilt signs; exact pinhole
+  match + reuse of PanTiltCamera::pixel_error_to_angles; round trip through project();
+  lost target -> no error; non-finite centroid rejected; invalid image/scenario config
+  rejected; determinism; finite outputs; pose independence; observe_beacon classification
+  (Visible / OutsideFieldOfView / BehindCamera); Step 1 + Step 2 regression assertions
+- step3_observation_smoke: PASS, machine-checks the critical review scenario
+  centre (320,240) / beacon (400,180) -> pixel (+80,-60) -> pan +2.524 deg (RIGHT),
+  tilt +1.885 deg (UP)
+- ASan/UBSan build: PASS (all 3 test executables + step3 smoke, no findings)
+- Step 1 + Step 2 regression: step1_math_smoke still ~0.001 deg, step2 smoke unchanged
+
+Step 4 - synthetic virtual-camera image renderer (CMake 4.4 / Ninja / Apple clang,
+C++20, OpenCV 5.0.0 via Homebrew, /opt/homebrew/lib/cmake/opencv5):
+- CMake configure: PASS - "FSOC: OpenCV 5.0.0 found - building Step 4 renderer"
+  (FSOC_ENABLE_OPENCV=AUTO; Steps 1-3 also configure/build/pass with OpenCV absent)
+- C++ compile/link: PASS, no new project warnings (same flag set as Steps 2-3);
+  OpenCV confined to the fsoc_render library, fsoc_core stays OpenCV-free
+- CTest: PASS (4 executables) - fsoc_step1_tests + fsoc_step2_tests + fsoc_step3_tests
+  + fsoc_step4_tests
+- fsoc_step4_tests: PASS (11 checks): frame dims 640x480 + CV_8UC1; background-only
+  images at level 5 for OutsideFieldOfView and BehindCamera; visible beacon brighter
+  than background; peak + weighted centroid near projected point; sub-pixel recovery
+  (320.4,239.7) and manual check (400.4,179.7) both within 0.1 px and provably not
+  rounded to integer; exact-centre beacon renders symmetrically; four-edge + FOV-edge
+  + fully-off-image clipping is safe (no overrun); invalid RendererConfig rejected
+  (w<=0, h<=0, sigma<=0, non-finite sigma, window<1); Visible without a finite image
+  point rejected; byte-identical re-render; Step 1-3 regression assertions
+- step4_renderer_smoke: PASS headless; sub-pixel scenario recovered (400.403, 179.703)
+  vs requested (400.400, 179.700) - true sub-pixel, not (400,180); wrote
+  generated/step4_center.png, step4_subpixel.png, step4_no_target.png (640x480 8-bit)
+- ASan/UBSan build: PASS (all 4 test executables + step4 smoke, no findings)
+- Step 1-3 regression: step1_math_smoke still ~0.001 deg; step2 + step3 smokes unchanged
+
+Step 5 - baseline beacon detector (CMake 4.4 / Ninja / Apple clang, C++20,
+OpenCV 5.0.0 via Homebrew):
+- CMake configure: PASS - "... building Step 4 renderer + Step 5 detector"
+  (OpenCV components extended to core imgproc imgcodecs; no highgui)
+- C++ compile/link: PASS, no new project warnings; detector is a new fsoc_perception
+  library linking fsoc::core + opencv_core + opencv_imgproc ONLY (not fsoc_render);
+  detector.hpp includes neither renderer.hpp nor observation.hpp (grep-verified)
+- CTest: PASS (5 executables) - fsoc_step1..5_tests
+- fsoc_step5_tests: PASS (12 checks): centred beacon detected at image centre;
+  sub-pixel recovery (320.4,239.7) and manual (400.4,179.7) within 0.05 px and
+  provably not integer-rounded; error bounded <= 0.15 px/axis across 5 interior
+  positions; quadrant signs of the detected centroid; background-only / speckled /
+  OutsideFieldOfView / BehindCamera frames -> std::nullopt; four near-edge beacons
+  found safely within 1 px; empty / CV_8UC3 / CV_32FC1 / CV_16UC1 frames rejected;
+  invalid config (threshold 0/255, min_bright_pixels 0/-3) rejected; bit-identical
+  re-detection; two-bright-region frames -> strongest integrated signal wins
+  (both orientations); renderer->detector->compute_tracking_error reproduces
+  RIGHT+ABOVE -> pixel x>0,y<0 and pan>0,tilt>0; Step 1-4 regression assertions
+- step5_detector_smoke: PASS headless; Scenario 2 detected (400.410, 179.687) from
+  pixels alone (error norm 0.016 px); Scenario 3 (no target) -> <none>; perception
+  chain check PASS; detector time ~0.6-1.3 ms/frame in Debug (not a gate)
+- ASan/UBSan build: PASS (all 5 test executables + step5 smoke, no findings)
+- Step 1-4 regression: step1_math_smoke still ~0.001 deg; step2/3/4 smokes unchanged
+
+Step 6 - pan/tilt PID controller (CMake 4.4 / Ninja / Apple clang, C++20):
+- CMake configure/build: PASS, no new project warnings; new fsoc_control library
+  links fsoc::core ONLY - OpenCV-free (grep: no opencv2 / cv:: / fsoc_render /
+  fsoc_perception in pid_controller.hpp/.cpp). Builds regardless of OpenCV.
+- CTest: PASS (6 executables) - fsoc_step1..6_tests
+- fsoc_step6_tests: PASS (15 checks): proportional sign in all 4 quadrants + zero;
+  P magnitude == kp*e; integral accumulates as ki*e*dt*n and cannot exceed
+  ki*integral_limit over 2000 frames; derivative step == kd*de/dt and is 0 on the
+  first sample; pan/tilt axes independent (identical tilt output regardless of pan
+  error); output never exceeds +/- output_limit; large +/- error saturates +/-;
+  anti-windup keeps |command| <= limit for 500 saturated frames then recovers to 0
+  in one frame, toy-plant error 1.0 -> <0.1 and comes off saturation; reset() makes
+  the next update identical to a fresh controller's first update (integral + deriv);
+  invalid dt (0 / negative / NaN / Inf) rejected with state untouched; invalid config
+  (negative kp/ki/kd/integral_limit, 0/negative/Inf output_limit, NaN gain, bad tilt
+  axis) rejected; non-finite TrackingError (angular or pixel) rejected; identical
+  command sequence from reset across two runs; manual sign check (+/-0.05,+/-0.02)
+- step6_pid_smoke: PASS - S1 (+0.05,+0.02)->(+0.1025,+0.0410); S2 negative mirror;
+  S3 pan_rate grows 0.0615->0.0690 over 6 frames (integral); S4 (2.0,-2.0)->
+  (+0.5236,-0.5236) saturated; S5 first update after reset -> 0 (deriv suppressed);
+  toy scalar plant |pan_err| 0.100 -> 0.007 rad
+- ASan/UBSan build: PASS (all 6 test executables + step6 smoke, no findings)
+- Step 1-5 regression: step1_math_smoke still ~0.001 deg; step2-5 smokes unchanged
+
+Step 7 - closed-loop SimulationRunner (CMake 4.4 / Ninja / Apple clang, C++20,
+OpenCV 5.0.0):
+- CMake configure/build: PASS, no new project warnings; new fsoc_simulation library
+  links fsoc::core + render + perception + control (the one integration layer)
+- CTest: PASS (7 executables) - fsoc_step1..7_tests
+- Truth boundary verified: grep of src/simulation_runner.cpp shows
+  observation.image_point_px used ONLY in the detection_error_px diagnostic block;
+  the control path is detector_.detect -> compute_tracking_error(detection, camera_)
+  -> controller_.update -> camera_.step
+- fsoc_step7_tests: PASS (12 checks): clock starts at 0 and increments by exactly dt;
+  deterministic (bit-identical result sequence over two runs); static acquisition
+  begins >50 px off-centre, 100% detected, final angular error < 0.05 deg, final
+  centroid < 2 px, camera pan/tilt move the correct way; linear target 100% detected,
+  RMS 0.39 deg (gate 0.75); sinusoidal 100% detected, RMS 0.55 deg (gate 1.0), max
+  0.80 deg, not diverging; closed-loop beats open-loop (det +42.6 pts, RMS 11.8x
+  lower); no-detection -> zero command + camera holds; sinusoid fast enough to lose
+  and reacquire the target -> PID resumes; command <= PID limit and applied rate <=
+  actuator limit across a harsh run (saturation observed); truth-shortcut test:
+  frame with a strong blob opposite the true projection -> command follows the
+  DETECTED blob; manual one-frame trace: RIGHT+ABOVE -> pan>0,tilt>0 and pixel
+  error DECREASES on the next frame; Step 1-6 regression assertions
+- step7_closed_loop_smoke: PASS - static acq beacon (428.89,167.08)->(320.00,240.00),
+  4.13 deg -> 0.0000 deg by t~0.5 s; sinusoidal 20 s 100% detected RMS 0.5461 deg
+  max 0.7982 deg; OPEN vs CLOSED detection 57.4% -> 100.0%, RMS 6.4549 -> 0.5461 deg
+- PID baseline (empirically tuned, not optimal): kp=12, ki=0, kd=0, output limit =
+  camera max rate (deg_to_rad(30)); kp swept 3..20, chose 12 for exact static
+  convergence + no oscillation + tight moving RMS
+- ASan/UBSan build: PASS (all 7 test executables + step7 smoke, no findings)
+- Step 1-6 regression: step1_math_smoke still ~0.001 deg; step2-6 smokes unchanged
+
+Step 8 - telemetry + benchmarking (CMake 4.4 / Ninja / Apple clang, C++20, OpenCV 5.0.0):
+- CMake configure/build: PASS, no new project warnings; new fsoc_telemetry library
+  links fsoc::simulation ONLY. Observer-only: telemetry consumes SimulationStepResult;
+  Step 7 SimulationRunner / SimulationStepResult NOT modified.
+- CTest: PASS (8 executables) - fsoc_step1..8_tests
+- fsoc_step8_tests: PASS (14 checks): TelemetryRecord copies every scalar/optional field;
+  optionals absent on target-loss, present when detected/tracking; saturation flags
+  (flat-out slew) correct; CSV header deterministic (27 columns) and == column_names();
+  every record line has 27 comma fields incl. empty ones for absent optionals; multiple
+  records; benchmark counts + detection_fraction; hand-computed RMS = sqrt(0.0011),
+  mean = 0.03, max = 0.05, final != max case, P95 nearest-rank (N=5 -> idx 4, N=7 ->
+  idx 6); hand-computed pixel RMS = sqrt(58.8); saturation fractions 2/6, 2/6, 1/6;
+  processing_fps = frames/wall and error metrics identical for wall=0.25 vs 4.0;
+  MANDATORY non-interference: run A (no logger) vs run B (CSV logger interleaved over
+  600 frames) -> identical SimulationStepResult sequences; BenchmarkMetrics == Step-7
+  evaluate() on a real run; Step 1-7 regression assertions
+- step8_telemetry_smoke: PASS - wrote generated/step8_{static,linear,sinusoidal,
+  open_loop}.csv (250/500/1000/1000 records, 27 cols); benchmark table Static
+  RMS 0.420 deg / P95 0.167 deg, Linear RMS 0.391 / P95 0.103, Sinusoidal-Closed
+  RMS 0.546 / P95 0.790, Sinusoidal-Open RMS 6.455 / P95 9.811; OPEN vs CLOSED
+  detection 57.4% -> 100.0%, RMS 6.45 -> 0.55 deg (11.8x); Simulation 50 Hz vs
+  Processing ~4700 FPS (~90x real time, ~215 us/frame)
+- ASan/UBSan build: PASS (all 8 test executables + step7/step8 smokes, no findings)
+- Step 1-7 regression: step1_math_smoke still ~0.001 deg; step2-7 smokes unchanged
+
+Step 9 - engineering camera-view visualization (CMake 4.4 / Ninja / Apple clang,
+C++20, OpenCV 5.0.0 incl. videoio):
+- CMake configure/build: PASS, no new project warnings; new fsoc_visualization
+  library links fsoc::simulation + fsoc::telemetry + opencv core/imgproc/imgcodecs
+  (+ opencv_videoio, FSOC_HAS_VIDEOIO). Observer-only: annotate() reads
+  SimulationStepResult + TelemetryRecord; grep of src/visualization.cpp shows no
+  runner/detector/controller/camera/trajectory reach-back. Step 7/8 sources NOT
+  modified.
+- CTest: PASS (9 executables) - fsoc_step1..9_tests
+- fsoc_step9_tests: PASS (15 checks): annotate() returns CV_8UC3 of the input size;
+  input CV_8UC1 byte-for-byte unchanged; empty / CV_8UC3 / CV_32FC1 input rejected;
+  crosshair at (cols/2, rows/2) and moves with a 800x600 frame (not hardcoded);
+  detection marker at telemetry.detected_* NOT at the truth projection nor centre;
+  no marker / no error vector when TargetLost; error vector present when a
+  TrackingError exists; TRACKING vs TARGET LOST images differ; saturation indicator
+  only when the flag is set; PAN/TILT and SIM/FRAME HUD reflect telemetry values;
+  repeated annotation byte-identical; all overlays off -> plain cvtColor(GRAY2BGR);
+  truth marker off by default, distinct square when enabled; annotate() does not
+  mutate result/telemetry; MANDATORY non-interference: 500 frames run with vs
+  without annotation -> identical SimulationStepResult sequence and the base frame
+  is byte-identical every frame; Step 1-8 regression assertions
+- step9_visualization_smoke: PASS - wrote 28 PNGs to generated/step9/ + optional
+  generated/step9_{static,sinusoidal}.mp4. Static story frame 0: ang_err 4.128 deg,
+  cmd pan 30.0 deg/s (PAN RATE LIMIT) -> final frame: beacon on crosshair,
+  ang_err 0.0000 deg, cmd 0 deg/s. Sinusoidal 500/500 detected, RMS 0.565 deg.
+  Target-lost frame: TARGET LOST, no detection marker, no error vector, cmd 0.
+- MANUAL VISUAL REVIEW: static_0000.png / static_0074.png / lost_lost.png inspected
+  and match the required story.
+- ASan/UBSan build: PASS (all 9 test executables + step8/step9 smokes, no findings)
+- Step 1-8 regression: step1_math_smoke still ~0.001 deg; step2-8 smokes unchanged
+
+Step 10 - baseline acceptance / validation suite (CMake 4.4 / Ninja / Apple clang,
+C++20, OpenCV 5.0.0):
+- CMake configure/build: PASS, no new project warnings; new fsoc_validation library
+  links fsoc::simulation + fsoc::telemetry + fsoc::visualization. EVALUATION layer:
+  it runs the existing v1 system and reads outputs; it implements no trajectory /
+  detector / PID / renderer / camera math (grep of src/validation.cpp: it constructs
+  SimulationRunner + run_and_record + compute_benchmark_metrics, and uses
+  SyntheticCameraRenderer + TrackingVisualizer only on the Step-9 observer path for
+  evidence frames). Step 1-9 sources byte-for-byte unchanged (git diff --name-only
+  HEAD -- src include apps/step[1-9]* tests/step[1-9]* -> empty).
+- Acceptance gates frozen BEFORE evaluation in docs/16_BASELINE_ACCEPTANCE.md; not
+  derived from the run being scored. Baseline PID unchanged: kp=12, ki=0, kd=0.
+- CTest: PASS (10 executables) - fsoc_step1..10_tests
+- fsoc_step10_tests: PASS (10 checks): nominal scenarios (static/linear/sinusoidal)
+  pass every gate; near-FOV-edge starts inside FOV + command points at target +
+  converges; actuator saturation actually saturates (>2 frames) yet max command <=
+  PID limit and max applied <= actuator limit, comes off the limit, error still
+  reduced; target loss/re-entry has T->L and L->T transitions, zero command + held
+  pose while lost, control resumes after reacquire; closed loop beats open loop
+  (RMS factor >= 3, detection +>= 20 pts; actual 11.8x / +42.6 pts); every scenario
+  finite + monotonic timestamps + fixed dt + within limits; every scenario
+  deterministic on replay + two independent suites give identical metrics; MANDATORY
+  failure check - inject an impossible gate and tighten a real threshold past its
+  actual value -> evaluate_passed() false and suite overall_passed false (the
+  evaluator is not always-green); suite shape 7 scenarios + overall == all-passed;
+  Step 1-9 regression assertions (camera.project, LinearTrajectory, observe_beacon,
+  PID sign, SimulationRunner+run_and_record 150 frames final < 0.05 deg, baseline
+  gains 12/0/0).
+- step10_validation_smoke: PASS - 7 / 7 scenarios PASS. Static Acquisition 100% /
+  RMS 0.4691 deg / P95 0.2885 / max 4.1275 / 0 lost; Slow Linear 100% / 0.3908 /
+  0.1028 / 4.8863 / 0; Sinusoidal 100% / 0.5461 / 0.7899 / 0.7982 / 0; Near-FOV-Edge
+  100% / 1.5613 / 2.8305 / 9.9273 / 0; Actuator Saturation 100% / 1.8189 / 3.2724 /
+  11.3779 / 0; Target Loss and Re-entry 73.2% / 4.9328 / 8.8284 / 9.9692 / 107 lost
+  (loss-semantics scenario, not a tracking-quality gate); Open vs Closed 100% /
+  0.5461 / 0.7899 / 0.7982 / 0. OPEN vs CLOSED: detection 57.4% -> 100.0% (+42.6
+  pts), RMS 6.4549 -> 0.5461 deg (x11.8), lost 426 -> 0. Ends
+  "STEP 10 BASELINE ACCEPTANCE: PASS" (exit 0). Suite wall time ~2.5 s
+  (informational; simulation is fixed 50 Hz).
+- Generated evidence (generated/step10/, git-ignored): VALIDATION_REPORT.md +
+  8 per-scenario 27-col CSVs + 19 annotated PNGs (28 files). Report values are
+  generated from the run, not hardcoded; overall verdict "BASELINE ACCEPTANCE: PASS".
+- ASan/UBSan build: PASS (all 10 test executables + step9/step10 smokes, no findings)
+- Step 1-9 regression: step1_math_smoke still ~0.001 deg; step2-9 smokes unchanged
+
 macOS target workflow:
+  brew install opencv          # required from Step 4 onward
   cmake --preset debug
   cmake --build --preset debug
   ctest --preset debug
   ./build/debug/step1_math_smoke
   ./build/debug/step2_trajectory_smoke
+  ./build/debug/step3_observation_smoke
+  ./build/debug/step4_renderer_smoke
+  ./build/debug/step5_detector_smoke
+  ./build/debug/step6_pid_smoke
+  ./build/debug/step7_closed_loop_smoke
+  ./build/debug/step8_telemetry_smoke
+  ./build/debug/step9_visualization_smoke
+  ./build/debug/step10_validation_smoke

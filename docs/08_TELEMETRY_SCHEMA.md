@@ -1,21 +1,90 @@
-# Telemetry Schema
+# Telemetry Schema (Step 8)
 
-Suggested CSV columns:
+`fsoc::TelemetryRecord` is one flat, explicitly-named record per simulation frame,
+produced by `make_telemetry_record(const SimulationStepResult&, max_pan_rate_rad_s,
+max_tilt_rate_rad_s)`. Telemetry is an **observer**: it consumes `SimulationStepResult`
+values and never calls back into the runner / PID / camera / detector / renderer /
+trajectory. Running a simulation with or without telemetry yields a bit-identical
+`SimulationStepResult` sequence.
 
-```text
-sim_time_s
-frame_index
-wall_fps
-target_x_m,target_y_m,target_z_m
-target_visible
-detection_found
-centroid_u_px,centroid_v_px
-error_u_px,error_v_px
-error_az_rad,error_el_rad
-camera_pan_rad,camera_tilt_rad
-pan_rate_cmd_rad_s,tilt_rate_cmd_rad_s
-pan_rate_applied_rad_s,tilt_rate_applied_rad_s
-pan_saturated,tilt_saturated
-```
+## Absent-value policy
 
-Missing detections should be represented explicitly, not with a fake valid centroid.
+* **In memory:** optional fields are `std::optional<double>` and hold `std::nullopt` when
+  the measurement is unavailable. There is **no** in-memory sentinel (`-1`, NaN, `N/A`).
+* **In CSV:** an absent optional is written as an **empty field** between commas
+  (`...,0,,,...`). Booleans are `0` / `1`. `tracking_state` is the string `Tracking` or
+  `TargetLost`. Doubles are written with `setprecision(10)`.
+
+## Fields
+
+| # | name | type | unit | meaning | availability |
+|--:|------|------|------|---------|--------------|
+| 1 | `simulation_time_s` | double | s | fixed-step simulation clock for this frame (`frame_index * dt`) | always |
+| 2 | `frame_index` | size_t | — | 0-based frame counter | always |
+| 3 | `target_visible` | bool | — | TRUTH: target inside the configured FOV | always |
+| 4 | `target_detected` | bool | — | MEASUREMENT: detector returned a centroid | always |
+| 5 | `target_position_x_m` | double | m | TRUTH: target world +X (forward) | always |
+| 6 | `target_position_y_m` | double | m | TRUTH: target world +Y (right) | always |
+| 7 | `target_position_z_m` | double | m | TRUTH: target world +Z (up) | always |
+| 8 | `target_velocity_x_mps` | double | m/s | TRUTH: target world velocity X | always |
+| 9 | `target_velocity_y_mps` | double | m/s | TRUTH: target world velocity Y | always |
+| 10 | `target_velocity_z_mps` | double | m/s | TRUTH: target world velocity Z | always |
+| 11 | `detected_x_px` | optional double | px | detected beacon centroid x (image: origin top-left, +x right) | present iff `target_detected` |
+| 12 | `detected_y_px` | optional double | px | detected beacon centroid y (+y down) | present iff `target_detected` |
+| 13 | `pixel_error_x_px` | optional double | px | `detected_x - cx` (`>0` = beacon RIGHT of centre) | present iff a `TrackingError` exists |
+| 14 | `pixel_error_y_px` | optional double | px | `detected_y - cy` (`>0` = beacon BELOW centre) | present iff a `TrackingError` exists |
+| 15 | `angular_error_pan_rad` | optional double | rad | `atan(pixel_error_x / fx)` (`>0` = command pan right) | present iff a `TrackingError` exists |
+| 16 | `angular_error_tilt_rad` | optional double | rad | `-atan(pixel_error_y / fy)` (`>0` = command tilt up) | present iff a `TrackingError` exists |
+| 17 | `angular_error_total_rad` | optional double | rad | `hypot(angular_error_pan_rad, angular_error_tilt_rad)` | present iff a `TrackingError` exists |
+| 18 | `camera_pan_rad` | double | rad | camera pan that produced this frame's observation (pre-step) | always |
+| 19 | `camera_tilt_rad` | double | rad | camera tilt that produced this frame's observation (pre-step) | always |
+| 20 | `command_pan_rate_rad_s` | double | rad/s | PID pan-rate command (`0` on loss / open-loop) | always |
+| 21 | `command_tilt_rate_rad_s` | double | rad/s | PID tilt-rate command (`0` on loss / open-loop) | always |
+| 22 | `applied_pan_rate_rad_s` | double | rad/s | pan rate the actuator applied (after rate saturation) | always |
+| 23 | `applied_tilt_rate_rad_s` | double | rad/s | tilt rate the actuator applied (after rate saturation) | always |
+| 24 | `pan_saturated` | bool | — | pan axis at the actuator rate limit this frame (`\|command_pan_rate\| >= max_pan_rate - 1e-9`) | always |
+| 25 | `tilt_saturated` | bool | — | tilt axis at the actuator rate limit this frame | always |
+| 26 | `detection_error_px` | optional double | px | DIAGNOSTIC: `‖detected centroid − exact projection‖` (truth used only here) | present iff both a detection and a `Visible` projection exist |
+| 27 | `tracking_state` | enum string | — | `Tracking` (a `TrackingError` was produced) or `TargetLost` (no detection) | always |
+
+## Tracking state
+
+`enum class TrackingState { Tracking, TargetLost }`. Deliberately two-valued: the runner
+has no deterministic acquisition phase, and "slewing flat-out while tracking" is already
+carried by `pan_saturated` / `tilt_saturated`. An `Acquiring` state would be decorative.
+
+## CSV
+
+* Written by `fsoc::CsvTelemetryLogger` — synchronous `std::ofstream`, one line per record,
+  flushed after every line. No threads, no async queue, no external CSV dependency.
+* Header line = the 27 column names above, comma-separated, in order.
+  `CsvTelemetryLogger::column_names()` is the single source of that order (also the stable
+  JSON key list for a future frontend).
+* Every record line has exactly 27 comma-separated fields (empty fields count).
+* Logs are written to `generated/` (git-ignored); binary/CSV logs are never committed.
+
+## Benchmark metrics — denominator conventions
+
+`fsoc::BenchmarkMetrics` / `compute_benchmark_metrics(records, wall_execution_time_s)`:
+
+* **Angular and pixel error** metrics (`rms_/mean_/max_/final_/p95_angular_error_rad`,
+  `mean_/rms_/max_pixel_error_px`): computed **only over frames with a `TrackingError`**
+  (`tracking_state == Tracking`). Denominator = `tracking_frames`. Pixel error uses the
+  magnitude `hypot(pixel_error_x, pixel_error_y)`.
+* **`mean_detection_error_px`**: over frames where `detection_error_px` is present.
+* **Saturation fractions** and **rate means / peaks**: over **all** frames.
+* **`detection_fraction`** = `detected_frames / frames`.
+* **`final_angular_error_rad`** = the total angular error of the chronologically last
+  tracking frame.
+* **95th percentile** (`p95_angular_error_rad`): nearest-rank on the sorted-ascending list
+  of `angular_error_total_rad` magnitudes — `index = ceil(0.95 * N) - 1`, clamped to
+  `[0, N-1]`. No statistics library.
+
+## Wall-clock vs simulation-clock
+
+* `simulation_time_s` and all physics use the **fixed** `dt = 0.02 s` (50 Hz). This is
+  never derived from wall-clock time and is fully replayable.
+* `wall_execution_time_s` and `processing_fps = frames / wall_execution_time_s` are
+  **measured separately** with `std::chrono::steady_clock` around the step loop only
+  (telemetry conversion and CSV I/O are excluded). `processing_fps` is the throughput of
+  the machine, **not** the 50 Hz simulated camera rate; the two are reported distinctly.
