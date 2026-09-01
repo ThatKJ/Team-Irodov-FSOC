@@ -37,6 +37,7 @@ apps/step7_closed_loop_smoke.cpp
 apps/step8_telemetry_smoke.cpp
 apps/step9_visualization_smoke.cpp
 apps/step10_validation_smoke.cpp
+apps/fsoc_demo.cpp
 cmake/CompilerWarnings.cmake
 cmake/Sanitizers.cmake
 docs/00_PROJECT_BRIEF.md
@@ -59,8 +60,11 @@ docs/15_INTERFACE_CONTRACTS.md
 docs/16_AI_CODING_GUARDRAILS.md
 docs/16_BASELINE_ACCEPTANCE.md
 docs/17_CLAUDE_CODE_USAGE.md
+docs/17_DEMO_FREEZE.md
+docs/18_FRONTEND_DATA_CONTRACT.md
 include/fsoc/camera.hpp
 include/fsoc/config.hpp
+include/fsoc/demo.hpp
 include/fsoc/detector.hpp
 include/fsoc/environment.hpp
 include/fsoc/geometry.hpp
@@ -82,7 +86,9 @@ prompts/DEBUGGING_PROMPT.md
 prompts/HANDOFF_PROMPT.md
 prompts/MASTER_IMPLEMENTATION_PROMPT.md
 prompts/STEP_PROMPTS.md
+scripts/run_baseline_demo.sh
 src/camera.cpp
+src/demo.cpp
 src/detector.cpp
 src/environment.cpp
 src/geometry.cpp
@@ -105,3 +111,4 @@ tests/step7_tests.cpp
 tests/step8_tests.cpp
 tests/step9_tests.cpp
 tests/step10_tests.cpp
+tests/step11_tests.cpp

@@ -3,7 +3,12 @@
 Recommended branches:
 - `main` — stable demonstration
 - short-lived feature branches: `feat/trajectory`, `feat/renderer`, `feat/pid`, etc.
-- `v1_baseline` — frozen once baseline acceptance passes
+
+Baseline tag:
+- **`v1_baseline` — created and pushed to `origin`.** It points at the merged Step‑10
+  baseline (`20c028c`), the validated centroid + PID FSOC baseline. It is a frozen
+  reference and is **never moved or recreated**; later work (Step 11 demo/frontend
+  packaging, then UKF/MPC/turbulence) is layered on top.
 
 Before merge:
 
@@ -13,13 +18,4 @@ cmake --build --preset debug
 ctest --preset debug
 ```
 
-After baseline success:
-
-```bash
-git checkout -b v1_baseline
-git push -u origin v1_baseline
-git tag -a v1-baseline -m "Validated centroid + PID FSOC baseline"
-git push origin v1-baseline
-```
-
-Develop UKF/MPC on new branches off the stable integration line; never erase the reference implementation.
+Develop UKF/MPC on new branches off the stable integration line; never erase the reference implementation. To inspect the frozen baseline: `git checkout v1_baseline` (detached HEAD).

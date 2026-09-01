@@ -235,6 +235,30 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(step10_validation_smoke PRIVATE fsoc::validation)
     fsoc_set_project_warnings(step10_validation_smoke)
     fsoc_enable_sanitizers(step10_validation_smoke)
+
+    # -----------------------------------------------------------------------
+    # fsoc_demo_support — demo/frontend packaging layer (Step 11). ADDITIVE.
+    # Pure observer: copies SimulationStepResult + TelemetryRecord into a
+    # frontend-oriented DemoSnapshot; owns DemoScenario presets + DemoSession.
+    # No physics, no control, no networking, no JSON.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_demo_support src/demo.cpp)
+    add_library(fsoc::demo_support ALIAS fsoc_demo_support)
+    target_include_directories(fsoc_demo_support
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_demo_support PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_demo_support PUBLIC fsoc::simulation fsoc::telemetry)
+    fsoc_set_project_warnings(fsoc_demo_support)
+    fsoc_enable_sanitizers(fsoc_demo_support)
+
+    add_executable(fsoc_demo apps/fsoc_demo.cpp)
+    target_link_libraries(fsoc_demo PRIVATE fsoc::demo_support)
+    fsoc_set_project_warnings(fsoc_demo)
+    fsoc_enable_sanitizers(fsoc_demo)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -300,5 +324,11 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step10_tests)
         fsoc_enable_sanitizers(fsoc_step10_tests)
         add_test(NAME fsoc_step10_tests COMMAND fsoc_step10_tests)
+
+        add_executable(fsoc_step11_tests tests/step11_tests.cpp)
+        target_link_libraries(fsoc_step11_tests PRIVATE fsoc::demo_support fsoc::validation)
+        fsoc_set_project_warnings(fsoc_step11_tests)
+        fsoc_enable_sanitizers(fsoc_step11_tests)
+        add_test(NAME fsoc_step11_tests COMMAND fsoc_step11_tests)
     endif()
 endif()

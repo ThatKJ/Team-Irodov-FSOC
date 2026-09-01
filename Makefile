@@ -1,4 +1,4 @@
-.PHONY: configure build test run run-step2 run-step3 run-step4 run-step5 run-step6 run-step7 run-step8 run-step9 run-step10 clean format
+.PHONY: configure build test run run-step2 run-step3 run-step4 run-step5 run-step6 run-step7 run-step8 run-step9 run-step10 run-step11 demo clean format
 
 configure:
 	cmake --preset debug
@@ -38,6 +38,12 @@ run-step9: build
 
 run-step10: build
 	./build/debug/step10_validation_smoke
+
+run-step11: build
+	./build/debug/fsoc_demo sinusoidal
+
+demo: build
+	./scripts/run_baseline_demo.sh
 
 format:
 	find include src apps tests -type f \( -name '*.hpp' -o -name '*.cpp' \) -print0 | xargs -0 clang-format -i

@@ -196,11 +196,38 @@ resuming after reacquire (73.2% detection is expected for this loss-semantics sc
 open vs closed detection 57.4% -> 100.0% (+42.6 pts), RMS 6.4549 -> 0.5461 deg (x11.8).
 ASan/UBSan clean. Steps 1-9 sources byte-for-byte unchanged.
 
-## Hours 46–48 — Step 11: Demo freeze
-- benchmark run
-- README instructions
-- clean build on teammate Mac
-- record metrics/demo
-- commit + create `v1_baseline`
+## Hours 46–48 — Step 11: Demo freeze + frontend data contract prep [DONE]
+- new `fsoc_demo_support` library (links `fsoc::simulation` + `fsoc::telemetry`) — an
+  ADDITIVE presentation/packaging layer. Changes NO validated algorithm: geometry, camera,
+  FOV math, trajectory equations, renderer, detector, `TrackingError`, PID law, PID gains
+  (kp=12, ki=0, kd=0), `SimulationRunner` order, and Step-10 gates are all untouched.
+- `DemoScenario` presets (static / sinusoidal / loss / open / closed) + `parse_demo_scenario`
+  — reuse the validated Step-10 trajectory/config parameters verbatim; `open` and `closed`
+  differ only by `control_enabled`
+- `DemoSnapshot` — a frontend-oriented per-frame view model built ONLY from
+  `SimulationStepResult` + `TelemetryRecord` + `CameraConfig`; radians internal,
+  `to_degrees()` at the UI boundary; future JSON shape frozen in
+  `docs/18_FRONTEND_DATA_CONTRACT.md`
+- `DemoSession` — deterministic; owns the trajectory (before the runner) + a
+  `SimulationRunner` + the telemetry conversion; `DemoRunState` (Ready/Running/Paused/
+  Finished) is application state, separate from `TrackingState`; a paused `step()` does not
+  advance simulation time; `reset()` -> bit-identical replay
+- `fsoc_demo` CLI + `make demo` / `scripts/run_baseline_demo.sh` reproducible bundle;
+  teammate-Mac checklist in `docs/17_DEMO_FREEZE.md`
 
-Only after this: UKF -> motion prediction -> MPC -> vibration/turbulence -> advanced detection.
+Gate: demo packaging must not alter closed-loop behaviour; Steps 1–10 stay green. PASSED —
+`fsoc_step11_tests` green (23 checks incl. the mandatory non-interference test: for all 5
+scenarios a bare `SimulationRunner` and the `DemoSession` produce field-identical
+`SimulationStepResult` sequences). `fsoc_demo` reproduces the Step-10 numbers exactly
+(static 4.13 deg -> 0.00; sinusoidal/closed RMS 0.5461 deg; open 57.4% det / RMS 6.4549;
+loss 73.2% det / 107 lost). `step10_validation_smoke` still ends
+`STEP 10 BASELINE ACCEPTANCE: PASS`. ASan/UBSan clean. No baseline source modified.
+
+## Freeze — DONE
+- `v1_baseline` tag **created and pushed to `origin`**, pointing at the merged Step‑10
+  baseline (`20c028c`). The validated Step‑10 baseline is FROZEN. Step 11 (demo/frontend
+  packaging) and all later work are additive on top of that commit; the tag is not moved.
+
+## Post-baseline (next)
+- as swappable implementations behind the stable interfaces:
+  UKF -> motion prediction -> MPC -> vibration/turbulence -> advanced detection.

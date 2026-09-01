@@ -202,8 +202,42 @@ For the first 48-hour MVP:
   (static 4.13° → 0.00°; sinusoidal RMS 0.55°; open→closed detection 57.4 % → 100 %, RMS
   6.45° → 0.55°, ×11.8). `fsoc_step10_tests` green (10 checks)
 - generated evidence → `generated/step10/` (git-ignored); the canonical gate definitions
-  live in `docs/16_BASELINE_ACCEPTANCE.md` (committed). The `v1_baseline` tag is **not**
-  created automatically — Step 10 only *recommends* the freeze
+  live in `docs/16_BASELINE_ACCEPTANCE.md` (committed). The **`v1_baseline` tag is created
+  and pushed** to `origin`, pointing at the merged Step‑10 baseline (`20c028c`); that
+  validated baseline is **frozen**
+
+## Step 11 implemented — demo freeze + frontend data contract prep
+
+- new `fsoc_demo_support` library (links `fsoc::simulation` + `fsoc::telemetry`) — an
+  **additive** presentation layer built *after* the frozen baseline. `v1_baseline` (tag,
+  pushed to `origin`) stays put; this step changes **no** validated algorithm. Geometry /
+  camera / trajectory / renderer / detector / `TrackingError` / PID law / PID gains /
+  `SimulationRunner` order / Step-10 gates are all untouched.
+- **`DemoScenario`** — `static` · `sinusoidal` · `loss` · `open` · `closed`, selected by a
+  clean token (`parse_demo_scenario`). Each reuses the validated Step-10 trajectory/config
+  **verbatim** (no retuning). `open` and `closed` share identical trajectory parameters —
+  only `control_enabled` differs.
+- **`DemoSnapshot`** — a per-frame view model for a future UI, built **only** from
+  `SimulationStepResult` + `TelemetryRecord` + `CameraConfig` by `make_demo_snapshot()`. It
+  never participates in control. Optionals are `std::nullopt` when the target is lost — no
+  sentinels. Fields + the future JSON shape are frozen in
+  `docs/18_FRONTEND_DATA_CONTRACT.md`.
+- **Units** — core stays radians / rad·s⁻¹ / m / m·s⁻¹ / px. Degrees appear only via
+  `to_degrees(const DemoSnapshot&)` at the UI boundary; core physics units are unchanged.
+- **`DemoSession`** — deterministic packaging of one scenario: owns a heap `Trajectory`
+  (constructed before, so it outlives the `SimulationRunner`) + the runner + the telemetry
+  conversion. `DemoRunState { Ready, Running, Paused, Finished }` is application state,
+  distinct from `TrackingState`; a **paused `step()` does not advance simulation time**.
+  `reset()` reproduces a bit-identical run.
+- **`fsoc_demo` CLI** — `./build/debug/fsoc_demo <scenario> [--duration s] [--csv path]
+  [--quiet]` / `--help`. Per-frame status lines + an end-of-run summary (detection %, RMS /
+  P95 / max angular error, lost frames) computed by the existing Step-8 `BenchmarkMetrics`.
+- **non-interference** (mandatory) — for all 5 scenarios a bare `SimulationRunner` and the
+  `DemoSession` produce field-identical `SimulationStepResult` sequences. `fsoc_step11_tests`
+  green (23 checks). Demo numbers match Step 10 exactly.
+- reproducible: `make demo` (or `scripts/run_baseline_demo.sh`) runs the Step-10 validation
+  + the static & sinusoidal demos + the Step-9 visualization evidence. See
+  `docs/17_DEMO_FREEZE.md` for the teammate-Mac checklist.
 
 ## macOS quick start
 
@@ -225,6 +259,8 @@ ctest --preset debug
 ./build/debug/step8_telemetry_smoke      # writes generated/step8_*.csv
 ./build/debug/step9_visualization_smoke  # writes generated/step9/*.png (+ optional .mp4)
 ./build/debug/step10_validation_smoke    # baseline acceptance; writes generated/step10/
+./build/debug/fsoc_demo sinusoidal       # demo runner: static|sinusoidal|loss|open|closed
+make demo                                # reproducible: validation + demos + visualization
 ```
 
 Steps 1–3 build and pass without OpenCV; if `opencv` is missing, CMake prints a notice

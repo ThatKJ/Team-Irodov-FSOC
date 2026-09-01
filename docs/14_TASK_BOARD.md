@@ -77,7 +77,19 @@
 - [x] MANDATORY failure-check test — impossible gate + tightened real threshold -> `evaluate_passed()` and `overall_passed` both false
 - [x] `step10_validation_smoke` — judge table + CSV/PNG evidence + `generated/step10/VALIDATION_REPORT.md`; ends `STEP 10 BASELINE ACCEPTANCE: PASS` (7/7)
 - [x] baseline acceptance metrics met — static 4.13 deg -> 0.00 deg, sinusoidal RMS 0.55 deg, open->closed detection 57.4% -> 100%, RMS x11.8
-- [ ] freeze `v1_baseline` — recommended; create tag/branch only on explicit instruction
+- [x] freeze `v1_baseline` — **tag created and pushed to `origin`**, pointing at the merged Step‑10 baseline (`20c028c`); the validated baseline is FROZEN and the tag is not moved by later work
+
+## Demo freeze / frontend prep (Step 11 — additive)
+- [x] `fsoc_demo_support` lib — links `fsoc::simulation` + `fsoc::telemetry`; pure observer, no physics/control/JSON/networking
+- [x] `DemoScenario` presets — static / sinusoidal / loss / open / closed + `parse_demo_scenario`; reuse validated Step-10 params verbatim
+- [x] open vs closed share identical `SinusoidalTrajectory` parameters — only `control_enabled` differs (tested)
+- [x] `DemoSnapshot` view model — built only from `SimulationStepResult` + `TelemetryRecord` + `CameraConfig`; optionals `std::nullopt` when lost
+- [x] units — radians internal; `to_degrees(DemoSnapshot)` at the UI boundary only; core physics units unchanged
+- [x] `DemoSession` — owns trajectory (before runner) + `SimulationRunner`; `DemoRunState` != `TrackingState`; paused `step()` does not advance sim time; `reset()` -> identical replay
+- [x] `fsoc_demo` CLI — `static|sinusoidal|loss|open|closed`, `--help/--csv/--duration/--quiet`; summary via existing `BenchmarkMetrics`
+- [x] MANDATORY non-interference — bare `SimulationRunner` vs `DemoSession` give field-identical `SimulationStepResult` sequences (all 5 scenarios)
+- [x] `fsoc_step11_tests` — 23 checks; Step-10 `ValidationSuite` still overall PASS; baseline PID still 12/0/0
+- [x] `make demo` / `scripts/run_baseline_demo.sh` — validation + demos + Step-9 visualization; `docs/17_DEMO_FREEZE.md` + `docs/18_FRONTEND_DATA_CONTRACT.md`
 
 ## Post-baseline
 - [ ] Eigen-backed UKF

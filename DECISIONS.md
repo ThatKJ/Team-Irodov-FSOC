@@ -316,5 +316,49 @@ Step 10 adds the baseline acceptance / validation suite — the last gate before
   logging code is re-implemented. `generated/step10/VALIDATION_REPORT.md` is generated
   from the run (values never hardcoded). All artifacts land in `generated/step10/`
   (git-ignored); `docs/16_BASELINE_ACCEPTANCE.md` is the one committed Step-10 document.
-- **The `v1_baseline` tag/branch is NOT created by Step 10.** The suite passing only
-  *recommends* the freeze; creating the tag is a separate, explicitly instructed step.
+- **The `v1_baseline` tag was created as a separate step, not by Step 10 itself.** The
+  Step‑10 suite passing was the precondition; the tag was then created and pushed to
+  `origin` pointing at the merged Step‑10 baseline (`20c028c`). It is **not** moved by
+  later work — Step 11 and everything after layer on top of that frozen commit.
+
+## ADR-014 — Demo/frontend packaging is an additive observer layer (`fsoc_demo_support`)
+**Status:** Accepted
+
+Step 11 prepares the frozen `v1_baseline` engine for the SIH demo and a future web
+frontend without touching a single validated algorithm.
+
+- **`fsoc_demo_support` is a PRESENTATION / PACKAGING layer, not a component.** It links
+  `fsoc::simulation` + `fsoc::telemetry` and consumes their outputs. It implements no
+  trajectory / detector / PID / renderer / camera / pixel→angle math, never enters a
+  control path, and adds no networking, HTTP, WebSocket, or JSON dependency. Geometry,
+  camera, trajectory, renderer, detector, `tracking_error`, `pid_controller`, and
+  `simulation_runner` are byte-for-byte unchanged (verified by `git diff`). Baseline PID
+  stays kp = 12, ki = 0, kd = 0; Step-10 acceptance thresholds are untouched.
+- **`DemoScenario` is presentation selection, distinct from `ValidationScenarioId`.** Five
+  presets (`static` / `sinusoidal` / `loss` / `open` / `closed`). Their trajectory/config
+  parameters are copied verbatim from `src/validation.cpp` via `make_demo_scenario_plan`
+  and are never retuned. `OpenLoop` and `ClosedLoop` share byte-identical
+  `SinusoidalTrajectory` parameters; only `control_enabled` differs.
+- **`DemoSnapshot` is a pure copy / view model.** Built only from `SimulationStepResult` +
+  `TelemetryRecord` + `CameraConfig` by `make_demo_snapshot()`. It never feeds control.
+  Absent measurements are `std::optional` = `std::nullopt` — no sentinel. The future
+  frontend consumes these fields as given and must not recompute PID / tracking error /
+  visibility / centroid / camera dynamics (`docs/18_FRONTEND_DATA_CONTRACT.md`).
+- **Units boundary is explicit.** Core and `DemoSnapshot` are radians / rad·s⁻¹ / m /
+  m·s⁻¹ / px. Degrees exist only in `to_degrees(const DemoSnapshot&)` for the UI. Core
+  physics units are not modified.
+- **State separation.** `DemoTrackingState` mirrors `fsoc::TrackingState` 1:1
+  (control/observation reality). `DemoRunState { Ready, Running, Paused, Finished }` is
+  application state. They never mix — `Paused` is not a kind of `TargetLost`, and a paused
+  `DemoSession::step()` advances no simulation time (no hidden simulation).
+- **Trajectory lifetime.** `DemoSession` declares its `std::unique_ptr<Trajectory>` before
+  its `SimulationRunner`, so the heap trajectory outlives the runner that holds it by
+  reference; no temporary trajectory is passed.
+- **Non-interference is mandatory and tested.** For every scenario, a bare
+  `SimulationRunner` and the `DemoSession` produce field-identical `SimulationStepResult`
+  sequences. `fsoc_step11_tests` (23 checks) also re-runs the Step-10 `ValidationSuite` and
+  asserts it still passes 7/7.
+- **The CLI reuses existing code.** `fsoc_demo` computes its summary with the Step-8
+  `compute_benchmark_metrics`; no metrics math is duplicated. `make demo` /
+  `scripts/run_baseline_demo.sh` is the reproducible bundle (`set -euo pipefail`, no
+  destructive git ops, no hardcoded paths).

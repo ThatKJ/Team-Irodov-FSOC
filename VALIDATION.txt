@@ -237,6 +237,58 @@ C++20, OpenCV 5.0.0):
 - ASan/UBSan build: PASS (all 10 test executables + step9/step10 smokes, no findings)
 - Step 1-9 regression: step1_math_smoke still ~0.001 deg; step2-9 smokes unchanged
 
+Step 11 - demo freeze + frontend data contract prep (CMake 4.4 / Ninja / Apple
+clang, C++20, OpenCV 5.0.0):
+- ADDITIVE packaging layer only. New fsoc_demo_support library links
+  fsoc::simulation + fsoc::telemetry. It is a pure observer: DemoSnapshot is
+  copied field-by-field from SimulationStepResult + TelemetryRecord + CameraConfig;
+  DemoSession composes an owned trajectory + a SimulationRunner + the Step-8
+  telemetry conversion and implements NO physics/control/geometry/networking/JSON.
+- Frozen baseline UNCHANGED: git diff --name-only HEAD -- src include (excluding
+  demo.*) is empty; geometry/camera/trajectory/renderer/detector/tracking_error/
+  pid_controller/simulation_runner untouched. Baseline PID still kp=12, ki=0, kd=0.
+  Step-10 acceptance thresholds untouched.
+- Units: core stays radians / rad/s / m / m/s / px. Degrees appear only via the
+  fsoc::to_degrees(DemoSnapshot) helper at the UI boundary (documented in
+  docs/18_FRONTEND_DATA_CONTRACT.md). Core physics units not modified.
+- DemoScenario presets reuse the validated Step-10 parameters verbatim (copied
+  from src/validation.cpp, not retuned): static -> Static Acquisition; sinusoidal
+  -> Sinusoidal Tracking; loss -> Target Loss and Re-entry; open/closed -> Open vs
+  Closed Loop with only control_enabled differing (identical trajectory).
+- CTest: PASS (11 executables) - fsoc_step1..11_tests
+- fsoc_step11_tests: PASS (23 checks): make_demo_snapshot copies target xyz/vel,
+  camera pan/tilt + applied rates + FOV, command + saturation flags; detection +
+  error optionals present while TRACKING and absent (std::nullopt) while
+  TARGET_LOST; tracking-state mirror is 1:1; core values are radians (FOV ~0.349
+  rad not 20); to_degrees() conversion correct incl. optional passthrough; Demo
+  session static begins ~4.13 deg off-axis and converges < 0.05 deg; sinusoidal
+  stays inside the Step-10 band (det 100%, RMS < 1.0, P95 < 1.0, max < 1.5, 0
+  lost); loss scenario produces TARGET_LOST then naturally reacquires; open has
+  control_enabled=false + zero commands + fixed camera, closed has
+  control_enabled=true + camera slews; open and closed share identical
+  SinusoidalTrajectory parameters (dynamic_cast param check + identical
+  target-truth sequence); reset -> bit-identical replay; two sessions -> identical
+  snapshot sequences; invalid scenario string rejected cleanly (nullopt);
+  DemoRunState transitions Ready->Running->Paused->Running->Finished and a PAUSED
+  step() does NOT advance frame_index or simulation_time_s; baseline PID gains
+  12/0/0 on every DemoScenarioPlan; Step-10 ValidationSuite.run_all() overall
+  still PASS (7/7); Step 1-10 spot regressions; MANDATORY non-interference - for
+  all 5 scenarios a bare SimulationRunner and the DemoSession produce
+  field-identical SimulationStepResult sequences (time, camera pose, detection,
+  tracking error, command, applied rates, target truth).
+- fsoc_demo CLI: PASS - static 100% / RMS 0.4691 deg / P95 0.2885 / max 4.1275 /
+  0 lost; sinusoidal 100% / 0.5461 / 0.7899 / 0.7982 / 0; loss 73.2% / 4.9328 /
+  8.8284 / 9.9692 / 107 lost; open 57.4% / 6.4549 / 9.8112 / 10.1916 / 426 lost;
+  closed 100% / 0.5461 / 0.7899 / 0.7982 / 0. Numbers match Step 10 exactly.
+  --help prints scenarios + notes; 'fsoc_demo banana' -> clean usage error, exit 2.
+- Reproducible: 'make demo' / scripts/run_baseline_demo.sh runs step10 validation
+  + static + sinusoidal demos + step9 visualization, prints artifact paths; Step 10
+  still ends "STEP 10 BASELINE ACCEPTANCE: PASS".
+- ASan/UBSan build: PASS (all 11 test executables + step10 smoke + fsoc_demo x5,
+  no findings)
+- Step 1-10 regression: all 10 smokes exit 0; step1_math_smoke still ~0.001 deg;
+  step10_validation_smoke still "STEP 10 BASELINE ACCEPTANCE: PASS".
+
 macOS target workflow:
   brew install opencv          # required from Step 4 onward
   cmake --preset debug
@@ -252,3 +304,5 @@ macOS target workflow:
   ./build/debug/step8_telemetry_smoke
   ./build/debug/step9_visualization_smoke
   ./build/debug/step10_validation_smoke
+  ./build/debug/fsoc_demo static      # + sinusoidal / loss / open / closed / --help
+  make demo                           # reproducible: validation + demos + visualization
