@@ -23,4 +23,11 @@
 - [x] OpenCV visualization — `fsoc_visualization`, observer-only `TrackingVisualizer` (CV_8UC1 -> annotated CV_8UC3), headless PNG/MP4 export
 - [x] Plot/export telemetry for judging — `fsoc_validation` suite writes per-scenario 27-col CSV + annotated PNG + `generated/step10/VALIDATION_REPORT.md` + judge-friendly summary table
 - [x] Baseline acceptance metrics met — 7/7 scenarios PASS (Static / Slow-Linear / Sinusoidal / Near-FOV-Edge / Actuator-Saturation / Loss-and-Re-entry / Open-vs-Closed); gates frozen in `docs/16_BASELINE_ACCEPTANCE.md`; `step10_validation_smoke` prints `STEP 10 BASELINE ACCEPTANCE: PASS`
-- [ ] Freeze `v1_baseline` — recommended; awaiting explicit go-ahead to create the tag/branch
+- [x] Freeze `v1_baseline` — **tag created and pushed to `origin`** (points at the merged Step‑10 baseline `20c028c`); the validated Step‑10 baseline is FROZEN. Step‑11 demo/frontend packaging is additive work layered on top and does not move the tag.
+- [x] Demo scenario presets — `DemoScenario` (static / sinusoidal / loss / open / closed) + `parse_demo_scenario`, reusing the validated Step-10 parameters verbatim
+- [x] Frontend snapshot contract — `DemoSnapshot` view model built only from `SimulationStepResult` + `TelemetryRecord` + `CameraConfig` (`fsoc_demo_support`); radians internal, `to_degrees()` at the UI boundary; documented in `docs/18_FRONTEND_DATA_CONTRACT.md`
+- [x] Demo session runner — `DemoSession` (deterministic, owns trajectory + `SimulationRunner`; `DemoRunState` Ready/Running/Paused/Finished; paused `step()` does not advance sim time); non-interference proven vs a bare `SimulationRunner`
+- [x] Demo CLI — `apps/fsoc_demo.cpp` (`static|sinusoidal|loss|open|closed`, `--help`, `--csv`, `--duration`, `--quiet`); reuses the Step-8 telemetry + benchmark code
+- [x] Reproducible demo workflow — `make demo` / `scripts/run_baseline_demo.sh` (validation + static + sinusoidal demos + Step-9 visualization evidence)
+- [x] Demo freeze doc + teammate Mac checklist — `docs/17_DEMO_FREEZE.md`
+- [x] Step-11 tests — `fsoc_step11_tests` (23 checks: snapshot copy, radians, `to_degrees`, session convergence, open==closed trajectory, reset replay, pause-no-advance, non-interference, baseline PID unchanged, Step-10 still PASS)

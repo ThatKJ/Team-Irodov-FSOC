@@ -317,3 +317,70 @@ Layers stay distinct — do not alias them:
   (exit 0) iff `overall_passed && report written`, otherwise
   `STEP 10 BASELINE ACCEPTANCE: FAIL` (exit 1). Suite wall time is printed as
   informational only — no ephemeral FPS figure is a permanent gate.
+
+## Demo packaging contract (Step 11, additive — does not touch the baseline)
+
+- **Presentation layer, not a component.** `fsoc_demo_support` (`fsoc/demo.hpp` +
+  `src/demo.cpp`) links `fsoc::simulation` + `fsoc::telemetry`. It packages the FROZEN
+  `v1_baseline` engine for the SIH demo and a future web frontend. It implements **no**
+  trajectory / detector / PID / renderer / camera / pixel→angle math, never enters a
+  control path, and adds **no** networking, HTTP, WebSocket, or JSON dependency. It does
+  **not** modify geometry, camera, trajectory, renderer, detector, `tracking_error`,
+  `pid_controller`, or `simulation_runner` — verified by `git diff`.
+- **`DemoScenario`** — `StaticAcquisition` / `SinusoidalTracking` / `LossReacquisition` /
+  `OpenLoop` / `ClosedLoop`. `to_string` gives the SCREAMING_SNAKE name;
+  `demo_scenario_token` gives the CLI token (`static` / `sinusoidal` / `loss` / `open` /
+  `closed`); `parse_demo_scenario(std::string_view)` accepts either form, case-sensitive,
+  and returns `std::nullopt` for anything else (the CLI turns that into a clean exit-2
+  usage error). `DemoScenario` is **not** a replacement for `ValidationScenarioId` — it is
+  presentation selection only.
+- **`DemoScenarioPlan`** (`make_demo_scenario_plan`) is the single place a scenario expands
+  into `{ SimulationRunnerConfig, std::unique_ptr<Trajectory>, duration_s }`. The parameter
+  values are copied verbatim from `src/validation.cpp` (`run_static_acquisition` /
+  `run_sinusoidal` / `run_loss_and_reentry` / `run_open_vs_closed`) and are **never**
+  retuned. `OpenLoop` and `ClosedLoop` share byte-identical `SinusoidalTrajectory`
+  parameters and `initial_tilt_rad`; only `control_enabled` differs.
+- **`DemoSnapshot`** — a per-frame COPY / VIEW MODEL produced by
+  `make_demo_snapshot(const SimulationStepResult&, const TelemetryRecord&, const
+  CameraConfig&)`. Clock, frame index, target truth, camera pose, applied rates and the raw
+  PID command come from the `SimulationStepResult`; the tracking-state mirror, detected
+  centroid, pixel/angular errors and saturation flags come from the `TelemetryRecord`; the
+  FOV comes from the `CameraConfig`. Absent measurements are `std::optional` = `std::nullopt`
+  — **no `-1` / `NaN` / sentinel**. The snapshot is never read by the control loop
+  (`test_non_interference`). Full field table + the future JSON shape:
+  `docs/18_FRONTEND_DATA_CONTRACT.md`.
+- **Units (frozen boundary).** The core and `DemoSnapshot` are **radians / rad·s⁻¹ / m /
+  m·s⁻¹ / px**. Degrees appear **only** through `to_degrees(const DemoSnapshot&) ->
+  DemoSnapshotAnglesDeg`, which converts the angular quantities (pan, tilt, their rates,
+  FOVs, optional angular errors, command rates) for a UI consumer. Pixels and metres pass
+  through unchanged. Core physics units are not modified.
+- **`DemoTrackingState`** mirrors `fsoc::TrackingState` 1:1 (`Tracking` / `TargetLost`;
+  `to_string` → `"TRACKING"` / `"TARGET_LOST"`) so the frontend contract does not depend on
+  a telemetry header. **`DemoRunState`** (`Ready` / `Running` / `Paused` / `Finished`) is
+  application/session state and is kept separate — `Paused` is not a kind of `TargetLost`.
+- **`DemoSession`** — composition over the validated stack. Member order (frozen for
+  lifetime safety): the `std::unique_ptr<Trajectory>` is declared and constructed **before**
+  the `SimulationRunner`, so the heap trajectory outlives the runner that references it; no
+  temporary trajectory is ever passed. `step()` advances exactly one fixed 50 Hz timestep
+  and returns that frame's snapshot; while `Paused` or `Finished` it advances **nothing**
+  (no hidden simulation — `frame_index()` / `simulation_time_s()` do not move). `reset()`
+  returns to `t = 0`, frame 0, camera at the initial pose, PID reset, scenario preserved —
+  the next run is bit-identical. Two sessions of one scenario emit identical snapshot
+  sequences. `last_snapshot()` / `last_telemetry()` / `last_step_result()` expose the three
+  views of the current frame; the CLI and the non-interference test use the latter two.
+- **Non-interference (mandatory).** For every `DemoScenario`, a bare `SimulationRunner`
+  built from the same `DemoScenarioPlan` and a `DemoSession` produce **field-identical**
+  `SimulationStepResult` sequences (`simulation_time_s`, `frame_index`, `camera_pan/tilt_rad`,
+  `command`, `applied_rates`, detection presence + centroid, tracking-error presence +
+  angles, target truth). Packaging the engine for the demo cannot change closed-loop
+  behaviour.
+- **`fsoc_demo`** (`apps/fsoc_demo.cpp`) — `fsoc_demo <token> [--duration <s>] [--csv
+  <path>] [--quiet]` / `--help`. Per-frame status lines plus an end-of-run summary
+  (detection %, RMS / P95 / max angular error, lost frames) computed with the existing
+  Step-8 `compute_benchmark_metrics` — no metrics math is re-implemented. Unknown scenario
+  or bad option → usage text on stderr, exit 2. Wall-clock FPS is informational; the
+  simulation is always fixed 50 Hz.
+- **Reproducibility.** `make demo` / `scripts/run_baseline_demo.sh` (`set -euo pipefail`,
+  no destructive git ops, no hardcoded Homebrew paths) runs the Step-10 validation, the
+  `static` and `sinusoidal` demos, and the Step-9 visualization evidence, then prints the
+  artifact paths under `generated/` (git-ignored).
