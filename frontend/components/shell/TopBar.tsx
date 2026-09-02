@@ -1,0 +1,59 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { User } from "lucide-react";
+
+import { useSimulation } from "@/lib/simulation/SimulationProvider";
+import { simClock } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { ScenarioMenu } from "./ScenarioMenu";
+import { SourceToggle } from "./SourceToggle";
+
+/** Fixed header, h-48. Reproduces the Stitch shell header, wired to the sim clock. */
+export function TopBar() {
+  const { simTime, runState, meta, status } = useSimulation();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const uplinkOk = status !== "error";
+
+  return (
+    <header className="fixed left-0 right-0 top-0 z-50 flex h-[48px] items-center justify-between border-b border-outline-variant bg-surface-container-lowest px-margin-md">
+      <div className="flex items-baseline gap-margin-md">
+        <span className="font-display-telem text-headline-sm tracking-widest text-on-surface">
+          IRODOV // FSOC ALIGNMENT
+        </span>
+        <span className="border-l border-outline-variant pl-margin-md font-label-xs text-label-xs uppercase tracking-tight text-on-surface-variant">
+          SIH26169
+        </span>
+      </div>
+
+      <div className="flex flex-1 justify-center">
+        <ScenarioMenu />
+      </div>
+
+      <div className="flex items-center gap-margin-md">
+        <SourceToggle />
+        <div className="flex items-center gap-unit font-data-mono text-data-mono text-on-surface-variant">
+          <span className="text-primary">SIM</span>
+          <span className="tnum">{mounted ? simClock(simTime) : "00.000"}s</span>
+        </div>
+        <div className="flex items-center gap-unit border-l border-outline-variant px-margin-sm">
+          <span
+            className={cn(
+              "h-2 w-2",
+              uplinkOk ? "bg-primary" : "bg-error",
+              runState === "RUNNING" && "animate-pulse",
+            )}
+          />
+          <span className="font-label-xs text-label-xs uppercase text-on-surface">
+            {uplinkOk ? "Uplink Active" : "Link Fault"}
+          </span>
+        </div>
+        <div className="ml-margin-sm flex h-8 w-8 items-center justify-center rounded-full bg-primary">
+          <User className="h-[18px] w-[18px] text-on-primary" strokeWidth={1.75} />
+        </div>
+      </div>
+    </header>
+  );
+}
