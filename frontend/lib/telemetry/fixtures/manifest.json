@@ -1,0 +1,71 @@
+{
+  "generatedAt": "2026-09-01T14:06:06.573Z",
+  "enginePath": "build/debug/fsoc_demo",
+  "scenarios": {
+    "static": {
+      "frames": 200,
+      "detectedFrames": 200,
+      "lostFrames": 0,
+      "detectionPct": 100,
+      "expected": {
+        "detectionPct": 100,
+        "rmsDeg": 0.4691,
+        "p95Deg": 0.2885,
+        "maxDeg": 4.1275,
+        "lostFrames": 0
+      }
+    },
+    "sinusoidal": {
+      "frames": 1000,
+      "detectedFrames": 1000,
+      "lostFrames": 0,
+      "detectionPct": 100,
+      "expected": {
+        "detectionPct": 100,
+        "rmsDeg": 0.5461,
+        "p95Deg": 0.7899,
+        "maxDeg": 0.7982,
+        "lostFrames": 0
+      }
+    },
+    "loss": {
+      "frames": 400,
+      "detectedFrames": 293,
+      "lostFrames": 107,
+      "detectionPct": 73.25,
+      "expected": {
+        "detectionPct": 73.2,
+        "rmsDeg": 4.9328,
+        "p95Deg": 8.8284,
+        "maxDeg": 9.9692,
+        "lostFrames": 107
+      }
+    },
+    "open": {
+      "frames": 1000,
+      "detectedFrames": 574,
+      "lostFrames": 426,
+      "detectionPct": 57.4,
+      "expected": {
+        "detectionPct": 57.4,
+        "rmsDeg": 6.4549,
+        "p95Deg": 9.8112,
+        "maxDeg": 10.1916,
+        "lostFrames": 426
+      }
+    },
+    "closed": {
+      "frames": 1000,
+      "detectedFrames": 1000,
+      "lostFrames": 0,
+      "detectionPct": 100,
+      "expected": {
+        "detectionPct": 100,
+        "rmsDeg": 0.5461,
+        "p95Deg": 0.7899,
+        "maxDeg": 0.7982,
+        "lostFrames": 0
+      }
+    }
+  }
+}

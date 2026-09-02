@@ -1,0 +1,28 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# production
+/build
+
+# testing / reports
+/playwright-report/
+/test-results/
+/blob-report/
+/.playwright/
+
+# misc
+.DS_Store
+*.pem
+.vercel
+
+# local env
+.env*.local
+
+# NOTE: lib/telemetry/fixtures/*.json ARE committed on purpose (deterministic
+# replay of real C++ telemetry for deployment / offline demo).
