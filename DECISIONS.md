@@ -362,3 +362,74 @@ frontend without touching a single validated algorithm.
   `compute_benchmark_metrics`; no metrics math is duplicated. `make demo` /
   `scripts/run_baseline_demo.sh` is the reproducible bundle (`set -euo pipefail`, no
   destructive git ops, no hardcoded paths).
+
+## ADR-015 — V2 AI PERCEPTION: a learned detector behind the frozen `BeaconDetection` contract
+**Status:** Accepted (phase in progress on `feat/ai-perception`; `v1_baseline` untouched)
+
+The validated v1 pipeline (`threshold → connected components → brightest component →
+intensity-weighted centroid`) is transparent and sub-pixel-accurate on clean Gaussian
+beacons, and it stays the frozen baseline. Its real weakness is *selection*: it has no
+model of which bright region is the beacon, so under low SNR, star clutter, hot pixels,
+blur/defocus, background gradients, or a distractor brighter than the target it locks onto
+the wrong blob or fabricates a detection. V2 adds a learned perception stack that is robust
+in those regimes, **without touching the controller**.
+
+- **Scope is perception only.** The AI produces the *same* `std::optional<BeaconDetection>`
+  the classical detector produces. `compute_tracking_error`, the PID law, the baseline
+  gains (kp = 12, ki = 0, kd = 0), `PanTiltCamera`, the actuator limits, the frozen
+  `SimulationRunner::step()` order, and the Step-10 acceptance thresholds are all unchanged.
+  No UKF / MPC / temporal model / trajectory prediction in this phase (those are ADR-0xx
+  future work, documented in `docs/19`).
+- **Not YOLO.** The target is a sub-pixel point source; bounding-box detection is the wrong
+  abstraction. `TinyBeaconNet` is a lightweight fully-convolutional **heatmap-localization**
+  network: single-channel input → (presence logit, location heatmap) → soft-argmax
+  sub-pixel centroid. Design budget < 1M params (actual ≈ 50k); real-time CPU inference.
+- **Pixels only at inference.** The learned detector receives a `cv::Mat` and nothing else
+  — never `TargetState`, trajectory, projected truth, `TrackingError`, or controller state.
+  Ground-truth labels (`target_present`, `x_px`, `y_px`) exist only in dataset generation,
+  training, and evaluation.
+- **Runtime stays C++.** Python (PyTorch) is permitted *offline only* for dataset tooling
+  and training, reversing ADR-001's Python ban for that narrow purpose (AI brief §5). The
+  trained model is exported to **ONNX** and run in C++ through **OpenCV 5 `dnn`** (already
+  present in the toolchain). No Python runtime, server, or glue in the closed loop / demo.
+- **Additive build + files only.** New libraries `fsoc_ai_datagen` (synthetic frame
+  synthesizer for datasets + AI eval), later `fsoc_ai_perception` (ONNX detector + hybrid)
+  and `fsoc_ai_validation` (new eval suite). New app `generate_ai_dataset`. `fsoc_core`
+  stays OpenCV-free; `fsoc_ai_datagen` links `fsoc::core` + OpenCV core/imgproc and — like
+  `fsoc_perception` — must not depend on `fsoc_render`. Datasets and AI eval artifacts are
+  git-ignored under `generated/`; the small `models/tiny_beacon_net.onnx` is committed.
+- **Synthetic-domain limitation is stated, not hidden.** The first model is trained purely
+  on domain-randomized virtual-camera imagery. No real sensor data, no atmospheric dataset,
+  no flight heritage — `docs/19` and `models/MODEL_CARD.md` say so explicitly.
+
+## ADR-016 — Perception is made pluggable via an additive strategy seam, default = Classical
+**Status:** Accepted (integration lands in a later stage of this phase)
+
+The AI must participate in real closed-loop tracking, not just a static screenshot demo, so
+`SimulationRunner` needs to be able to run classical / AI / hybrid perception. Two options
+were considered:
+
+1. **Fork a post-v1 runner** that copies the loop and swaps the detector. Rejected: it
+   duplicates the frozen `step()` ordering and target-loss policy, and any future baseline
+   fix would have to be mirrored in two places — exactly the "god-loop / copy-paste"
+   failure the architecture forbids.
+2. **Additive strategy seam in the existing runner** (chosen). Introduce
+   `enum class PerceptionMode { Classical, AI, Hybrid }` and a narrow
+   `PerceptionStrategy` interface whose single job is `cv::Mat → std::optional<BeaconDetection>`
+   (+ diagnostics). `SimulationRunnerConfig` gains a `PerceptionMode` field that **defaults
+   to `Classical`**; in that mode the runner calls the existing `BeaconDetector` exactly as
+   today. `step()` order, the clock, the loss policy, and camera stepping are unchanged.
+
+Guarantees for option 2:
+- **Bit-identical default.** A regression test runs every Step-10 / demo scenario through
+  the seam in `Classical` mode and asserts a field-identical `SimulationStepResult`
+  sequence versus a bare v1 `SimulationRunner`. Step-10 must still end
+  `STEP 10 BASELINE ACCEPTANCE: PASS`.
+- **No truth to detectors.** The strategy is handed only the `cv::Mat`; the seam sits at
+  the exact point the runner already calls `detector_.detect(frame)`.
+- **Diagnostics stay out of control.** AI confidence / perception source / inference-ms /
+  classical-vs-AI distance are recorded as telemetry-only fields (`PerceptionSource` is a
+  diagnostic enum, never a `TrackingState` / `DemoRunState`). The controller never reads
+  neural confidence.
+- **Hybrid policy is config-driven and documented** (agreement radius, AI confidence
+  threshold, high-confidence override) — see `docs/19_AI_PERCEPTION_ARCHITECTURE.md`.

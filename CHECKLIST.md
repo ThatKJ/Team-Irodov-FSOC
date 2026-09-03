@@ -31,3 +31,19 @@
 - [x] Reproducible demo workflow — `make demo` / `scripts/run_baseline_demo.sh` (validation + static + sinusoidal demos + Step-9 visualization evidence)
 - [x] Demo freeze doc + teammate Mac checklist — `docs/17_DEMO_FREEZE.md`
 - [x] Step-11 tests — `fsoc_step11_tests` (23 checks: snapshot copy, radians, `to_degrees`, session convergence, open==closed trajectory, reset replay, pause-no-advance, non-interference, baseline PID unchanged, Step-10 still PASS)
+
+## V2 — AI PERCEPTION (`feat/ai-perception`, post-`v1_baseline`)
+
+- [x] AI design + integration decisions — `DECISIONS.md` ADR-015 (learned detector behind the frozen `BeaconDetection` contract; TinyBeaconNet, not YOLO; ONNX→OpenCV-DNN; synthetic-only) and ADR-016 (additive `PerceptionMode` strategy seam, default = Classical, bit-identical regression)
+- [x] Synthetic dataset generator — `fsoc_ai_datagen` (`fsoc/ai_frame_synth.hpp` + `src/ai_frame_synth.cpp`): pure seeded domain randomization (beacon peak/σ/anisotropy/edge-clip, background gradient + vignette, Gaussian read + shot-like noise, hot/dead/salt pixels, Gaussian blur / defocus / motion blur, star clutter + bright distractor + cluster, negatives); frozen 8-stage order; `synthesize(seed)` byte-reproducible
+- [x] Dataset CLI — `apps/generate_ai_dataset.cpp` → `generate_ai_dataset` (contiguous disjoint train/val/test blocks over one global index space, per-sample `sample_seed_for`, evenly-spaced negatives, JSONL label manifests + `dataset.json` reproducibility manifest); output git-ignored under `generated/ai_dataset/`
+- [x] AI datagen tests — `fsoc_ai_datagen_tests` (config validation, seed determinism + 20k collision-free, byte-identical frames per seed, force-target override, positive-has-signal / negative-is-empty, negative-fraction respected, edge-clip both ways, difficulty bounds)
+- [x] Python training toolchain scaffold — `tools/ai/` (`common.py` frozen preprocessing/heatmap/decode, `model.py` TinyBeaconNet ~50k params, `dataset.py`, `train_beacon_net.py`, `eval_beacon_net.py` val-threshold calibration, `export_onnx.py`, `make_parity_fixture.py`, `requirements.txt`, `README.md`)
+- [x] AI docs — `docs/19_AI_PERCEPTION_ARCHITECTURE.md`, `docs/20_AI_DATASET_AND_TRAINING.md`
+- [ ] Train TinyBeaconNet + calibrate threshold + export `models/tiny_beacon_net.onnx` + `models/MODEL_CARD.md`
+- [ ] C++ AI detector — `fsoc_ai_perception` (`AiBeaconDetector`, OpenCV-DNN ONNX), model-file validation, Python↔C++ preprocessing + inference parity tests
+- [ ] Hybrid detector + `PerceptionMode` / `PerceptionSource`; config-driven hybrid policy
+- [ ] `SimulationRunner` perception seam (default Classical, bit-identical regression; Step-10 still PASS) + AI telemetry fields
+- [ ] AI evaluation suite `fsoc_ai_validation` — scenario families A–K, CLASSICAL vs AI vs HYBRID table, C++ inference latency
+- [ ] Frontend AI integration — perception toggle, AI confidence/source/latency panels, heatmap overlay, benchmark + architecture views
+- [ ] `docs/21_AI_VALIDATION.md` + README/VALIDATION/FILES/TASK_BOARD/INTERFACE_CONTRACTS updates

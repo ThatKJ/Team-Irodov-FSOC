@@ -384,3 +384,29 @@ Layers stay distinct — do not alias them:
   no destructive git ops, no hardcoded Homebrew paths) runs the Step-10 validation, the
   `static` and `sinusoidal` demos, and the Step-9 visualization evidence, then prints the
   artifact paths under `generated/` (git-ignored).
+
+## V2 AI perception contract (post-`v1_baseline`, additive — full detail in `docs/19`)
+
+- **The controller-facing contract is unchanged.** The learned detector emits the *same*
+  `std::optional<BeaconDetection>` (centroid-only, no fabricated confidence) as the classical
+  detector. `compute_tracking_error`, the PID law + gains, `PanTiltCamera`, actuator limits,
+  the frozen `SimulationRunner::step()` order, and the Step-10 gates are untouched.
+- **`fsoc_ai_datagen`** (`fsoc/ai_frame_synth.hpp` + `src/ai_frame_synth.cpp`) — dataset
+  tooling only, **not** in the control path. Links `fsoc::core` + OpenCV core/imgproc; like
+  `fsoc_perception` it must **not** depend on `fsoc_render`. `AiFrameSynthesizer::synthesize(
+  seed)` is a pure, portable, byte-reproducible function (all randomness via
+  `std::mt19937_64`). It re-uses the analytic Gaussian beacon model, never the renderer.
+- **`generate_ai_dataset`** (`apps/generate_ai_dataset.cpp`) — writes
+  `generated/ai_dataset/{train,val,test}` + JSONL label manifests + `dataset.json`. Splits
+  are contiguous, disjoint blocks of one global index space; per-sample seed
+  `sample_seed_for(dataset_seed, global_index)` ⇒ no cross-split leakage. Output git-ignored.
+- **Learned detector (`fsoc_ai_perception`, later stage).** `AiBeaconDetector::detect(const
+  cv::Mat&) → std::optional<AiBeaconDetection>` — pixels only (never `TargetState`,
+  trajectory, projected truth, `TrackingError`, controller state). `AiBeaconDetection`
+  wraps a `BeaconDetection` plus **diagnostic-only** `confidence` / `peak_confidence` /
+  `inference_ms`. Same input validation style as `BeaconDetector` (empty / non-`CV_8UC1`
+  → `std::invalid_argument`); constructor fails cleanly on a missing / malformed model.
+- **Perception seam.** `enum class PerceptionMode { Classical, AI, Hybrid }` on
+  `SimulationRunnerConfig`, **default `Classical`** (bit-identical to v1, regression-tested).
+  `enum class PerceptionSource { None, Classical, AI, HybridAgreement }` is **diagnostic
+  telemetry only** — never a `TrackingState` / `DemoRunState`, never read by the PID.

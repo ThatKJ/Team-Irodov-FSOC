@@ -259,6 +259,34 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(fsoc_demo PRIVATE fsoc::demo_support)
     fsoc_set_project_warnings(fsoc_demo)
     fsoc_enable_sanitizers(fsoc_demo)
+
+    # =======================================================================
+    # V2 AI PERCEPTION (post-v1_baseline; additive — no frozen module changes)
+    # =======================================================================
+
+    # -----------------------------------------------------------------------
+    # fsoc_ai_datagen — domain-randomized synthetic frame synthesizer for
+    # TinyBeaconNet dataset generation + AI evaluation. Depends on fsoc::core +
+    # OpenCV core/imgproc only. MUST NOT depend on fsoc_render / fsoc_perception:
+    # it re-uses the analytic Gaussian beacon model, not renderer code.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_ai_datagen src/ai_frame_synth.cpp)
+    add_library(fsoc::ai_datagen ALIAS fsoc_ai_datagen)
+    target_include_directories(fsoc_ai_datagen
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_ai_datagen PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_ai_datagen PUBLIC fsoc::core opencv_core opencv_imgproc)
+    fsoc_set_project_warnings(fsoc_ai_datagen)
+    fsoc_enable_sanitizers(fsoc_ai_datagen)
+
+    add_executable(generate_ai_dataset apps/generate_ai_dataset.cpp)
+    target_link_libraries(generate_ai_dataset PRIVATE fsoc::ai_datagen opencv_imgcodecs)
+    fsoc_set_project_warnings(generate_ai_dataset)
+    fsoc_enable_sanitizers(generate_ai_dataset)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -330,5 +358,12 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_step11_tests)
         fsoc_enable_sanitizers(fsoc_step11_tests)
         add_test(NAME fsoc_step11_tests COMMAND fsoc_step11_tests)
+
+        # --- V2 AI PERCEPTION tests ---
+        add_executable(fsoc_ai_datagen_tests tests/ai_datagen_tests.cpp)
+        target_link_libraries(fsoc_ai_datagen_tests PRIVATE fsoc::ai_datagen opencv_core)
+        fsoc_set_project_warnings(fsoc_ai_datagen_tests)
+        fsoc_enable_sanitizers(fsoc_ai_datagen_tests)
+        add_test(NAME fsoc_ai_datagen_tests COMMAND fsoc_ai_datagen_tests)
     endif()
 endif()
