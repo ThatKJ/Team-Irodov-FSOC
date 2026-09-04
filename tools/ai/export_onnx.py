@@ -68,6 +68,11 @@ def main() -> None:
                       ONNX_PRESENCE_OUTPUT: {0: "batch"},
                       ONNX_HEATMAP_OUTPUT: {0: "batch"}},
         do_constant_folding=True,
+        # Pin the legacy TorchScript exporter: it emits the fixed opset-12 graph
+        # (Conv/Gemm/MaxPool/Relu, BN folded) that the C++ OpenCV-DNN path and the
+        # parity fixture are built against. torch>=2.9 defaults to the dynamo
+        # exporter, which needs onnxscript and produces a different graph.
+        dynamo=False,
     )
     size_kb = out_path.stat().st_size / 1024.0
     print(f"wrote {out_path}  ({size_kb:.1f} KiB, {n_params:,} params)")

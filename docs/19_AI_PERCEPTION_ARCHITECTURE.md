@@ -68,13 +68,17 @@ Input  [N, 1, 240, 320]  float32 ∈ [0,1]
   block2    DWConv 32 s1 · PWConv 32→48 · BN·ReLU → 48 × 60× 80
   block3    DWConv 48 s1 · PWConv 48→64 · BN·ReLU → 64 × 60× 80   (= HM_H×HM_W)
   ├─ heatmap head   Conv 64→32 3×3 · BN·ReLU · Conv 32→1 1×1 → [N,1,60,80] logits
-  └─ presence head  GAP(64) · FC 64→32 · ReLU · FC 32→1       → [N,1] logit
+  └─ presence head  GlobalMaxPool(64) · FC 64→32 · ReLU · FC 32→1 → [N,1] logit
 ```
 
-- **Parameter budget:** < 1,000,000 trainable params. Actual ≈ 50k (printed by
+- **Presence pooling is global *max*, not average** (ADR-017): the beacon occupies
+  << 1 cell of the 60×80 trunk map, so averaging over ~4800 cells destroys the
+  "is there a peak anywhere" signal. `MaxPool` stays inside the frozen opset-12
+  ONNX interface and is OpenCV-DNN-safe.
+- **Parameter budget:** < 1,000,000 trainable params. Actual **27,282** (printed by
   `train_beacon_net.py`; recorded in `models/tiny_beacon_net.meta.json` and the
   model card).
-- **Ops only:** Conv, depthwise-separable Conv, BatchNorm, ReLU, global average
+- **Ops only:** Conv, depthwise-separable Conv, BatchNorm, ReLU, global max
   pool, Linear. No pretrained weights, no ResNet/ViT/CLIP.
 - **Raw logits out.** `sigmoid()` is applied *outside* the ONNX graph, identically
   in Python eval and in C++, so the graph stays tiny and `BCEWithLogits` is exact.

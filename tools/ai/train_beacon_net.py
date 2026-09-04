@@ -51,17 +51,31 @@ def pick_device(name: str) -> torch.device:
     return torch.device("cpu")
 
 
-def heatmap_loss_fn(pred_logit: torch.Tensor, target_hm: torch.Tensor) -> torch.Tensor:
-    """MSE between sigmoid(heatmap logits) and the Gaussian target heatmap.
+def heatmap_loss_fn(pred_logit: torch.Tensor, target_hm: torch.Tensor,
+                    pos_weight: float = 0.0) -> torch.Tensor:
+    """Foreground-weighted MSE between sigmoid(heatmap logits) and the Gaussian
+    target heatmap.
 
-    Applied to positives AND negatives (negatives have an all-zero target, which
-    pushes the surface flat so soft-argmax is meaningless once presence < thr).
+    The 60x80 grid is ~97 % background (the Gaussian label covers ~120 cells).
+    Plain unweighted MSE is minimised by a near-flat surface, so the peak is
+    never shaped and centroid error stalls at tens of px (diagnosed in Stage 2 —
+    DECISIONS.md ADR-017). Each cell whose target > 0 is up-weighted by
+    ``1 + pos_weight``; ``pos_weight == 0`` recovers the original MSE.
+
+    Applied to positives AND negatives (negatives have an all-zero target, so
+    every cell keeps weight 1 and the surface is still pushed flat when no beacon
+    is present, keeping soft-argmax meaningless once presence < thr).
     """
-    return nn.functional.mse_loss(torch.sigmoid(pred_logit), target_hm)
+    prob = torch.sigmoid(pred_logit)
+    if pos_weight <= 0.0:
+        return nn.functional.mse_loss(prob, target_hm)
+    w = 1.0 + pos_weight * (target_hm > 0).to(prob.dtype)
+    return (w * (prob - target_hm) ** 2).sum() / w.sum()
 
 
 @torch.no_grad()
-def evaluate(model, loader, device, presence_threshold: float) -> dict:
+def evaluate(model, loader, device, presence_threshold: float,
+             heatmap_pos_weight: float = 0.0) -> dict:
     model.eval()
     bce = nn.BCEWithLogitsLoss()
     tot_p_loss = tot_h_loss = 0.0
@@ -76,7 +90,7 @@ def evaluate(model, loader, device, presence_threshold: float) -> dict:
         p_logit, h_logit = model(x)
         p_logit = p_logit.squeeze(1)
         tot_p_loss += bce(p_logit, present).item()
-        tot_h_loss += heatmap_loss_fn(h_logit.squeeze(1), hm).item()
+        tot_h_loss += heatmap_loss_fn(h_logit.squeeze(1), hm, heatmap_pos_weight).item()
         n_batches += 1
 
         prob = torch.sigmoid(p_logit).cpu().numpy()
@@ -130,6 +144,9 @@ def main() -> None:
     ap.add_argument("--weight-decay", type=float, default=1e-4)
     ap.add_argument("--lambda-presence", type=float, default=1.0)
     ap.add_argument("--lambda-heatmap", type=float, default=1.0)
+    ap.add_argument("--heatmap-pos-weight", type=float, default=80.0,
+                    help="foreground up-weight for the heatmap MSE (cells with target>0 "
+                         "get weight 1+W); 0 = original unweighted MSE. See ADR-017.")
     ap.add_argument("--presence-threshold", type=float, default=0.5,
                     help="threshold for train-time metrics only; final threshold is "
                          "calibrated on val by eval_beacon_net.py")
@@ -187,7 +204,7 @@ def main() -> None:
             x, hm, present = x.to(device), hm.to(device), present.to(device)
             p_logit, h_logit = model(x)
             p_loss = bce(p_logit.squeeze(1), present)
-            h_loss = heatmap_loss_fn(h_logit.squeeze(1), hm)
+            h_loss = heatmap_loss_fn(h_logit.squeeze(1), hm, args.heatmap_pos_weight)
             loss = args.lambda_presence * p_loss + args.lambda_heatmap * h_loss
 
             opt.zero_grad(set_to_none=True)
@@ -201,7 +218,8 @@ def main() -> None:
 
         train_p = run_p / max(n_batches, 1)
         train_h = run_h / max(n_batches, 1)
-        val = evaluate(model, val_loader, device, args.presence_threshold)
+        val = evaluate(model, val_loader, device, args.presence_threshold,
+                       args.heatmap_pos_weight)
         val_total = args.lambda_presence * val["presence_loss"] + args.lambda_heatmap * val["heatmap_loss"]
 
         history.append({
@@ -261,6 +279,9 @@ def main() -> None:
         f"epochs run         : {history[-1]['epoch']} (best val at epoch {best_epoch})\n"
         f"wall time          : {wall:.1f} s\n"
         f"lambda p / h       : {args.lambda_presence} / {args.lambda_heatmap}\n"
+        f"heatmap pos-weight : {args.heatmap_pos_weight}  (foreground-weighted MSE; ADR-017)\n"
+        f"presence pooling   : global max\n"
+        f"checkpoint criterion: min val_total = lambda_p*BCE(presence) + lambda_h*weighted_MSE(heatmap)\n"
         f"\n"
         f"best-val metrics (threshold {args.presence_threshold}):\n"
         f"  presence precision : {bm['precision']:.4f}\n"

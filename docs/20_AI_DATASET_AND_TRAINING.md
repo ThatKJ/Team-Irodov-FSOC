@@ -122,15 +122,31 @@ inference.**
 
 ```
 L = λ_p · BCEWithLogits(presence_logit, target_present)
-  + λ_h · MSE( sigmoid(heatmap_logit), gaussian_heatmap )
+  + λ_h · weightedMSE( sigmoid(heatmap_logit), gaussian_heatmap )
+
+weightedMSE(p, t) = Σ w·(p−t)²  /  Σ w ,   w = 1 + pos_weight·[t > 0]
 ```
 
-`λ_p = λ_h = 1.0` (CLI-tunable, logged separately every epoch). MSE on the
-sigmoid heatmap vs the Gaussian target is chosen over focal/BCE-heatmap losses:
-at 60×80 there is no severe dense class imbalance, and MSE directly shapes the
-surface the soft-argmax decoder integrates. The heatmap loss is applied to
-negatives too (all-zero target) so the surface goes flat when no beacon is
-present.
+`λ_p = λ_h = 1.0`; `pos_weight = 80` (all CLI-tunable — `--lambda-presence`,
+`--lambda-heatmap`, `--heatmap-pos-weight` — and logged separately every epoch).
+
+**Why weighted, not plain MSE (ADR-017).** The 60×80 target grid is ~97 %
+background (the σ = 1.75-cell Gaussian covers ~120 of 4800 cells). *Un*weighted
+MSE on the sigmoid surface is minimised by a near-flat ~0 map (MSE ≈ 1.4e-3) and
+the few foreground cells cannot pull it into a peak — the first real training run
+stalled at centroid MAE ≈ 40 px with this loss. Up-weighting the `t > 0` cells by
+`1 + pos_weight` makes the loss actually shape the peak the soft-argmax decoder
+integrates (probe: MAE 42 → 12–15 px). Focal / penalty-reduced BCE on the soft
+heatmap was tried and rejected — it destabilised the presence head. `pos_weight
+= 0` recovers the original plain MSE.
+
+The heatmap loss is applied to negatives too (all-zero target → every cell keeps
+weight 1) so the surface goes flat when no beacon is present.
+
+**Checkpoint criterion:** `best.pt` = the epoch with the lowest
+`val_total = λ_p · BCE(presence) + λ_h · weightedMSE(heatmap)` on the **validation**
+split — i.e. the training objective, evaluated on held-out data. The test split is
+never consulted for checkpoint selection.
 
 ## 8. Training toolchain (`tools/ai/`)
 
@@ -142,10 +158,11 @@ C++/OpenCV-DNN). Setup and exact reproduce commands: `tools/ai/README.md`.
 | `common.py` | frozen preprocessing / heatmap / decode / coord maps — mirrored in C++ |
 | `model.py` | `TinyBeaconNet` |
 | `dataset.py` | reads `generated/ai_dataset/` → tensors |
-| `train_beacon_net.py` | AdamW + cosine LR, per-epoch val metrics, `best.pt` / `last.pt`, early stopping (`--patience`), `training_history.json` |
+| `train_beacon_net.py` | AdamW + cosine LR, per-epoch val metrics, `best.pt` / `last.pt`, early stopping (`--patience`), `training_history.json` (ADR-017 weighted heatmap loss + `--heatmap-pos-weight`) |
 | `eval_beacon_net.py` | threshold sweep on **val**, freeze threshold, stratified **test** metrics, latency |
-| `export_onnx.py` | `best.pt` → `models/tiny_beacon_net.onnx` (opset 12, dynamic batch) + `.meta.json`; torch↔onnxruntime parity check |
+| `export_onnx.py` | `best.pt` → `models/tiny_beacon_net.onnx` (opset 12, dynamic batch, `dynamo=False`) + `.meta.json`; torch↔onnxruntime parity check |
 | `make_parity_fixture.py` | writes `tests/fixtures/ai_parity/` for the C++ parity tests |
+| `selfcheck.py` | fast learn-ability regression (guards ADR-017 loss/pool) |
 
 Device auto-selects Apple MPS → CUDA → CPU. Seeds: `random`, `numpy`, `torch`,
 DataLoader generator all set from `--seed` (default 26169).
@@ -159,21 +176,46 @@ epochs             : 40 (early-stop patience 8)
 batch size         : 32
 optimizer          : AdamW  lr 2e-3  weight_decay 1e-4  cosine anneal
 lambda presence/hm : 1.0 / 1.0
-device             : <filled from run>
-trainable params   : <filled from run>   (budget < 1,000,000)
+heatmap pos_weight : 80        (ADR-017 foreground-weighted MSE)
+presence pooling   : global max (ADR-017)
+device             : MPS (Apple) — dataset determinism is exact; MPS training is
+                     seeded but not bit-identical (conv/matmul reduction order)
+trainable params   : 27,282   (budget < 1,000,000)
 ```
 
-## 10. Training results — *TO BE FILLED FROM `models/training_summary.txt`*
+## 10. Training results (Stage-2 run, seed 26169, MPS, 2026-09-04)
 
 | metric (best-val checkpoint) | value |
 |---|---|
-| epoch of best val | _pending_ |
-| val presence precision / recall / F1 | _pending_ |
-| val false-positive rate | _pending_ |
-| val centroid MAE / RMSE (px) | _pending_ |
-| calibrated presence threshold (val, fp ≤ 0.02) | _pending_ |
-| test detection rate / FP rate / centroid MAE | _pending_ |
-| python (torch CPU) latency mean / p95 (ms) | _pending_ |
+| epochs run / best val epoch | 21 (early stop) / **9** |
+| trainable params | 27,282 |
+| val presence precision / recall / F1 (thr 0.5) | 0.825 / 0.923 / 0.872 |
+| val presence false-positive rate (thr 0.5) | 0.587 |
+| val centroid MAE / RMSE (px, thr 0.5, all val TPs) | 45.1 / 158.5 |
+| **frozen presence threshold** | **0.95** — rule: lowest val threshold with FPR ≤ 0.02; none achieved it (presence-head limit), so the rule's fallback (lowest-FP threshold in the 0.05–0.95 sweep) is frozen. val P/R/F1 @ 0.95 = 0.974 / 0.376 / 0.542, FPR 0.030 |
+| **test @ frozen 0.95** — presence | precision **0.989**, recall **0.404**, FPR **0.013**, neg-reject **0.987** (TP 364 / TN 296 / FP 4 / FN 536) |
+| **test @ frozen 0.95** — localization (committed detections, n=364, Euclidean px) | median **1.71**, p90 **2.91**, p95 **5.66**, MAE 8.70, RMSE 52.9, max 631; **97.5 % ≤ 10 px**, 94.0 % ≤ 5 px |
+| python (torch CPU) latency mean / p95 | 3.4 ms / 3.8 ms (~300 fps, single frame) |
+| torch ↔ ONNX Runtime parity (12 fixed frames) | presence logit max\|Δ\| 9.5e-7, heatmap 7.6e-6, decoded centroid 1.8e-6 px |
+
+### Known limitation (Stage-2 finding — see ADR-017 coda)
+
+The **presence head** does not separate "beacon present" from "clutter only" well
+enough to give both low false-positive and high recall (val AUC ≈ 0.82). At the
+frozen safe threshold the model is a **precise but low-recall** detector: of the
+~40 % of beacons it commits to, **97.5 % localize within 10 px** (median 1.7 px)
+and the false-lock rate is ~1 %. It **abstains** on the cases it cannot trust —
+detection rate drops to ~12 % on low-SNR (peak/read σ < 20) and dim (peak < 100)
+beacons and ~2 % on edge-clipped beacons — rather than locking onto the wrong
+blob. When it *does* commit under clutter / a brighter distractor / blur, median
+error stays ≈ 1.7 px (97 % ≤ 10 px), so the learned PSF signature is real; the
+gap is recall, not precision. Ten training variants (loss form, channel width
+16–32, stem stride, a global-context head) all plateau here — a ~27 k-param
+single-frame CNN cannot reliably out-select a distractor deliberately rendered
+brighter than the target with an overlapping σ range (30 % of positives, by
+design). Recall is expected to come from the **Stage-3 hybrid policy** (the
+classical detector) and, longer term, the **Phase-2 spatio-temporal detector**
+(`docs/19 §8`).
 
 Deployed C++ OpenCV-DNN latency (mean / median / p95 / max / throughput) is
 measured by `fsoc_ai_validation` and reported in `docs/21_AI_VALIDATION.md`.

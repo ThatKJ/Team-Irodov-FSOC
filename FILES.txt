@@ -118,6 +118,9 @@ tests/step9_tests.cpp
 tests/step10_tests.cpp
 tests/step11_tests.cpp
 tests/ai_datagen_tests.cpp
+tests/fixtures/ai_parity/expected.json
+tests/fixtures/ai_parity/input.png
+tests/fixtures/ai_parity/preprocessed_ref.png
 tools/ai/README.md
 tools/ai/common.py
 tools/ai/dataset.py
@@ -126,4 +129,14 @@ tools/ai/export_onnx.py
 tools/ai/make_parity_fixture.py
 tools/ai/model.py
 tools/ai/requirements.txt
+tools/ai/selfcheck.py
 tools/ai/train_beacon_net.py
+models/MODEL_CARD.md
+models/tiny_beacon_net.onnx
+models/tiny_beacon_net.meta.json
+models/threshold.json
+models/eval_report.json
+models/eval_report.txt
+models/stage2_test_report.json
+models/training_history.json
+models/training_summary.txt

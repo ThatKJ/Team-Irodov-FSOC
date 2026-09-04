@@ -55,6 +55,9 @@ cmake --preset release && cmake --build --preset release --target generate_ai_da
 cmake --preset debug && cmake --build --preset debug
 
 # 3. train  (Apple MPS / CUDA / CPU auto-detected)
+#    --heatmap-pos-weight 80 (default) applies the ADR-017 foreground-weighted
+#    heatmap MSE; the presence head is global-max-pool. `python tools/ai/selfcheck.py`
+#    is a fast regression that these are in place (fails with the old plain-MSE / GAP config).
 python tools/ai/train_beacon_net.py --dataset generated/ai_dataset \
     --epochs 40 --batch-size 32 --seed 26169
 
@@ -81,12 +84,13 @@ ctest --preset debug
 | file | role |
 |---|---|
 | `common.py` | **frozen** preprocessing, heatmap label, soft-argmax decode, coordinate maps — mirrored bit-for-bit in `src/ai_beacon_detector.cpp` |
-| `model.py` | `TinyBeaconNet` — depthwise-separable FCN, ~50k params, presence + heatmap heads |
+| `model.py` | `TinyBeaconNet` — depthwise-separable FCN, 27,282 params, global-max presence pool (ADR-017), presence + heatmap heads |
 | `dataset.py` | reads `generated/ai_dataset/` (PNG + JSONL) into tensors |
-| `train_beacon_net.py` | training loop, metrics, checkpoints, early stopping |
+| `train_beacon_net.py` | training loop, metrics, checkpoints, early stopping (ADR-017 weighted heatmap loss + `--heatmap-pos-weight`) |
 | `eval_beacon_net.py` | threshold calibration on VAL, stratified TEST metrics, latency |
-| `export_onnx.py` | best checkpoint → `models/tiny_beacon_net.onnx` + `.meta.json` |
+| `export_onnx.py` | best checkpoint → `models/tiny_beacon_net.onnx` + `.meta.json` (legacy opset-12 exporter, `dynamo=False`) |
 | `make_parity_fixture.py` | writes `tests/fixtures/ai_parity/` |
+| `selfcheck.py` | fast learn-ability regression (128-sample overfit: presence acc ≥ 0.97, centroid median ≤ 3 px, p90 ≤ 20 px); guards ADR-017 |
 
 ## Determinism / leakage
 

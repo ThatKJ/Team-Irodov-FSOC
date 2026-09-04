@@ -5,8 +5,7 @@ Design goals (see docs/19_AI_PERCEPTION_ARCHITECTURE.md):
   * single-channel input, real-time on CPU
   * two heads: beacon-presence logit + beacon-location heatmap logits
   * plain, reviewable ops only: Conv / depthwise-separable Conv / BN / ReLU /
-    global average pool / Linear. No YOLO, no ResNet/ViT/CLIP, no pretrained
-    weights.
+    global max pool / Linear. No YOLO, no ResNet/ViT/CLIP, no pretrained weights.
 
 Input : [N, 1, 240, 320]   float32 in [0, 1]
 Output: presence_logit [N, 1]   (raw logit; sigmoid applied outside the graph)
@@ -67,8 +66,13 @@ class TinyBeaconNet(nn.Module):
             nn.Conv2d(c2, 1, 1),                                  # heatmap logits
         )
 
+        # Global MAX pool (not average): the beacon is a sparse point source that
+        # occupies << 1 cell of the 60x80 trunk feature map. Global *average*
+        # pooling dilutes those few bright cells across ~4800 and the presence
+        # head cannot learn "is there a peak anywhere"; global *max* pooling keeps
+        # that signal. (Stage-2 training diagnostic — see DECISIONS.md ADR-017.)
         self.presence_head = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
+            nn.AdaptiveMaxPool2d(1),
             nn.Flatten(),
             nn.Linear(c4, c2),
             nn.ReLU(inplace=True),
