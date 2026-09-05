@@ -32,6 +32,14 @@ void SimulationRunnerConfig::validate() const {
         throw std::invalid_argument(
             "SimulationRunnerConfig: PID tilt output limit exceeds camera max tilt rate.");
     }
+    if (perception_mode != PerceptionMode::Classical) {
+        if (!ai_detector.has_value()) {
+            throw std::invalid_argument(
+                "SimulationRunnerConfig: ai_detector config is required when "
+                "perception_mode != Classical.");
+        }
+        ai_detector->validate();
+    }
 }
 
 SimulationRunnerConfig baseline_runner_config() {
@@ -72,7 +80,11 @@ SimulationRunner::SimulationRunner(SimulationRunnerConfig config, const Trajecto
               config_.initial_tilt_rad),
       renderer_(config_.renderer),
       detector_(config_.detector),
-      controller_(config_.controller) {}
+      controller_(config_.controller) {
+    if (config_.perception_mode != PerceptionMode::Classical) {
+        ai_detector_.emplace(*config_.ai_detector);
+    }
+}
 
 SimulationStepResult SimulationRunner::step() {
     SimulationStepResult result{};
@@ -94,14 +106,28 @@ SimulationStepResult SimulationRunner::step() {
     // 3. render the synthetic frame — the renderer sees ONLY the observation
     const cv::Mat frame = renderer_.render(observation);
 
-    // 4. detect — MEASUREMENT path, pixels only
-    const std::optional<BeaconDetection> detection = detector_.detect(frame);
-    result.detection = detection;
-    result.target_detected = detection.has_value();
+    // 4. detect — MEASUREMENT path, pixels only. Classical mode never
+    // constructs/runs the AI detector (ai_detector_ stays std::nullopt), so
+    // this reduces to exactly the pre-Stage-3 call in that (default) mode.
+    std::optional<BeaconDetection> classical_detection{};
+    std::optional<AiBeaconDetection> ai_detection{};
+    if (config_.perception_mode != PerceptionMode::AI) {
+        classical_detection = detector_.detect(frame);
+    }
+    if (config_.perception_mode != PerceptionMode::Classical) {
+        ai_detection = ai_detector_->detect(frame);
+    }
 
-    // 5. tracking error from the DETECTED centroid (never observation.image_point_px)
+    const PerceptionResult perception =
+        resolve_perception(config_.perception_mode, classical_detection, ai_detection);
+    result.detection = perception.detection;
+    result.target_detected = perception.detection.has_value();
+    result.perception = perception.diagnostics;
+
+    // 5. tracking error from the DETECTED (control-facing) centroid (never
+    // observation.image_point_px)
     const std::optional<TrackingError> tracking_error =
-        compute_tracking_error(detection, camera_);
+        compute_tracking_error(result.detection, camera_);
     result.tracking_error = tracking_error;
 
     // 6. control, or the target-loss / open-loop policy
@@ -121,9 +147,9 @@ SimulationStepResult SimulationRunner::step() {
         camera_.step(command.pan_rate_rad_s, command.tilt_rate_rad_s, config_.timestep_s);
 
     // Diagnostic scoring: detected centroid vs exact projection (truth used ONLY here).
-    if (detection.has_value() && observation.image_point_px.has_value()) {
-        const double dx = detection->centroid_px.x_px - observation.image_point_px->x_px;
-        const double dy = detection->centroid_px.y_px - observation.image_point_px->y_px;
+    if (result.detection.has_value() && observation.image_point_px.has_value()) {
+        const double dx = result.detection->centroid_px.x_px - observation.image_point_px->x_px;
+        const double dy = result.detection->centroid_px.y_px - observation.image_point_px->y_px;
         result.detection_error_px = std::hypot(dx, dy);
     }
 

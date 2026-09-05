@@ -61,9 +61,9 @@ fsoc_enable_sanitizers(fsoc_control)
 set(FSOC_OPENCV_AVAILABLE OFF)
 if(NOT FSOC_ENABLE_OPENCV STREQUAL "OFF")
     if(FSOC_ENABLE_OPENCV STREQUAL "ON")
-        find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs)
+        find_package(OpenCV REQUIRED COMPONENTS core imgproc imgcodecs dnn)
     else()
-        find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+        find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs dnn)
     endif()
     if(OpenCV_FOUND)
         set(FSOC_OPENCV_AVAILABLE ON)
@@ -138,6 +138,25 @@ if(FSOC_OPENCV_AVAILABLE)
     fsoc_enable_sanitizers(step5_detector_smoke)
 
     # -----------------------------------------------------------------------
+    # fsoc_ai_perception — Stage-3 learned detector + Safe Hybrid seam.
+    # AiBeaconDetector (OpenCV-DNN / ONNX, TinyBeaconNet) + resolve_perception
+    # (ADR-018 policy, pure decision function). Depends on fsoc::core + OpenCV
+    # (core, imgproc, dnn). MUST NOT depend on fsoc_render.
+    # -----------------------------------------------------------------------
+    add_library(fsoc_ai_perception src/ai_beacon_detector.cpp src/perception.cpp)
+    add_library(fsoc::ai_perception ALIAS fsoc_ai_perception)
+    target_include_directories(fsoc_ai_perception
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${OpenCV_INCLUDE_DIRS}
+    )
+    target_compile_features(fsoc_ai_perception PUBLIC cxx_std_20)
+    target_link_libraries(fsoc_ai_perception PUBLIC fsoc::core opencv_core opencv_imgproc opencv_dnn)
+    fsoc_set_project_warnings(fsoc_ai_perception)
+    fsoc_enable_sanitizers(fsoc_ai_perception)
+
+    # -----------------------------------------------------------------------
     # fsoc_simulation — the deterministic closed-loop integration layer (Step 7).
     # This is the ONE place the tested modules come together.
     # -----------------------------------------------------------------------
@@ -151,7 +170,7 @@ if(FSOC_OPENCV_AVAILABLE)
     )
     target_compile_features(fsoc_simulation PUBLIC cxx_std_20)
     target_link_libraries(fsoc_simulation
-        PUBLIC fsoc::core fsoc::render fsoc::perception fsoc::control)
+        PUBLIC fsoc::core fsoc::render fsoc::perception fsoc::control fsoc::ai_perception)
     fsoc_set_project_warnings(fsoc_simulation)
     fsoc_enable_sanitizers(fsoc_simulation)
 
@@ -287,6 +306,16 @@ if(FSOC_OPENCV_AVAILABLE)
     target_link_libraries(generate_ai_dataset PRIVATE fsoc::ai_datagen opencv_imgcodecs)
     fsoc_set_project_warnings(generate_ai_dataset)
     fsoc_enable_sanitizers(generate_ai_dataset)
+
+    # -----------------------------------------------------------------------
+    # ai_inference_benchmark — Stage-3 C++ OpenCV-DNN latency benchmark.
+    # Loads the model once (excluded from timing), warms up, then times
+    # >= 500 detect() calls. See docs/19 + Stage-3 checkpoint report §15.
+    # -----------------------------------------------------------------------
+    add_executable(ai_inference_benchmark apps/ai_inference_benchmark.cpp)
+    target_link_libraries(ai_inference_benchmark PRIVATE fsoc::ai_perception fsoc::render)
+    fsoc_set_project_warnings(ai_inference_benchmark)
+    fsoc_enable_sanitizers(ai_inference_benchmark)
 endif()
 
 if(FSOC_BUILD_TESTS)
@@ -365,5 +394,36 @@ if(FSOC_BUILD_TESTS)
         fsoc_set_project_warnings(fsoc_ai_datagen_tests)
         fsoc_enable_sanitizers(fsoc_ai_datagen_tests)
         add_test(NAME fsoc_ai_datagen_tests COMMAND fsoc_ai_datagen_tests)
+
+        # --- Stage 3: C++ AI detector (model load / preprocessing / decode /
+        # parity / robustness / determinism). Needs models/ + tests/fixtures/
+        # ai_parity/ resolved relative to the project root, not the build dir
+        # or CWD, so another clone builds/runs this unmodified.
+        add_executable(fsoc_ai_beacon_detector_tests tests/ai_beacon_detector_tests.cpp)
+        target_link_libraries(fsoc_ai_beacon_detector_tests
+            PRIVATE fsoc::ai_perception opencv_imgcodecs opencv_imgproc)
+        target_compile_definitions(fsoc_ai_beacon_detector_tests
+            PRIVATE FSOC_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+        fsoc_set_project_warnings(fsoc_ai_beacon_detector_tests)
+        fsoc_enable_sanitizers(fsoc_ai_beacon_detector_tests)
+        add_test(NAME fsoc_ai_beacon_detector_tests COMMAND fsoc_ai_beacon_detector_tests)
+
+        # --- Stage 3: Safe Hybrid policy (ADR-018) — pure resolve_perception
+        # decision-table tests. No model / ONNX / filesystem dependency.
+        add_executable(fsoc_hybrid_perception_tests tests/hybrid_perception_tests.cpp)
+        target_link_libraries(fsoc_hybrid_perception_tests PRIVATE fsoc::ai_perception)
+        fsoc_set_project_warnings(fsoc_hybrid_perception_tests)
+        fsoc_enable_sanitizers(fsoc_hybrid_perception_tests)
+        add_test(NAME fsoc_hybrid_perception_tests COMMAND fsoc_hybrid_perception_tests)
+
+        # --- Stage 3: default-Classical SimulationRunner regression + full
+        # CLASSICAL/AI/HYBRID SimulationRunner integration.
+        add_executable(fsoc_perception_integration_tests tests/perception_integration_tests.cpp)
+        target_link_libraries(fsoc_perception_integration_tests PRIVATE fsoc::simulation)
+        target_compile_definitions(fsoc_perception_integration_tests
+            PRIVATE FSOC_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+        fsoc_set_project_warnings(fsoc_perception_integration_tests)
+        fsoc_enable_sanitizers(fsoc_perception_integration_tests)
+        add_test(NAME fsoc_perception_integration_tests COMMAND fsoc_perception_integration_tests)
     endif()
 endif()

@@ -4,11 +4,13 @@
 #include <optional>
 #include <vector>
 
+#include "fsoc/ai_beacon_detector.hpp"
 #include "fsoc/camera.hpp"
 #include "fsoc/config.hpp"
 #include "fsoc/detector.hpp"
 #include "fsoc/geometry.hpp"
 #include "fsoc/observation.hpp"
+#include "fsoc/perception.hpp"
 #include "fsoc/pid_controller.hpp"
 #include "fsoc/renderer.hpp"
 #include "fsoc/target_state.hpp"
@@ -62,6 +64,9 @@ struct SimulationStepResult {
 
     // --- diagnostic scoring: detected centroid vs exact projection (truth used here only) ---
     std::optional<double> detection_error_px{};
+
+    // --- perception diagnostics (Stage 3, additive) — DIAGNOSTIC ONLY, never fed to control ---
+    PerceptionDiagnostics perception{};
 };
 
 struct SimulationRunnerConfig {
@@ -79,9 +84,17 @@ struct SimulationRunnerConfig {
     // reset every frame (used for the open- vs closed-loop comparison).
     bool control_enabled{true};
 
+    // Perception seam (Stage 3). DEFAULT Classical -> bit-identical to v1
+    // (regression-tested): the AI detector is never constructed and never
+    // runs. `ai_detector` is REQUIRED (must have a value) iff perception_mode
+    // != Classical; validate() enforces this.
+    PerceptionMode perception_mode{PerceptionMode::Classical};
+    std::optional<AiBeaconDetectorConfig> ai_detector{};
+
     // Validates every sub-config, that renderer dimensions match the camera, that
-    // timestep_s is finite and > 0, and that each PID output limit does not
-    // exceed the corresponding camera actuator rate. Throws std::invalid_argument.
+    // timestep_s is finite and > 0, that each PID output limit does not exceed
+    // the corresponding camera actuator rate, and that ai_detector is present
+    // whenever perception_mode != Classical. Throws std::invalid_argument.
     void validate() const;
 };
 
@@ -118,6 +131,7 @@ private:
     SyntheticCameraRenderer renderer_;
     BeaconDetector detector_;
     PIDController controller_;
+    std::optional<AiBeaconDetector> ai_detector_;  // present iff perception_mode != Classical
     double simulation_time_s_{0.0};
     std::size_t frame_index_{0};
 };
