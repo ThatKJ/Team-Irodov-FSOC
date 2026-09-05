@@ -434,6 +434,12 @@ Guarantees for option 2:
 - **Hybrid policy is config-driven and documented** (agreement radius, AI confidence
   threshold, high-confidence override) — see `docs/19_AI_PERCEPTION_ARCHITECTURE.md`.
 
+**Note (ADR-018).** The confidence-override escape hatch sketched above — AI confidence
+resolving classical/AI disagreement, or gating an AI-only detection — was retired after
+Stage-2 training evidence showed confidence does not separate correct from wrong accepted
+detections. See ADR-018 for the Safe Hybrid policy that replaces it. This ADR is kept
+as-written for history; it is not silently rewritten.
+
 ## ADR-017 — Stage-2 training fix: foreground-weighted heatmap loss + max-pool presence head
 **Status:** Accepted (Stage 2 of `feat/ai-perception`; offline training toolchain only — no
 C++ runtime, no `v1_baseline`, no closed-loop code touched)
@@ -493,3 +499,76 @@ dataset design — `docs/20 §3`, the intended hard case). This is **reported, n
 around**: recall is expected from the Stage-3 hybrid policy (the classical detector)
 and, longer-term, the Phase-2 spatio-temporal detector (`docs/19 §8`). No easier test
 set was generated; the frozen threshold was chosen on val before test was scored.
+
+## ADR-018 — Post-Stage-2 safety revision: AI is candidate perception, not independent control authority
+**Status:** Accepted (documentation / architecture-decision only — Stage 3 implementation has
+**not** started; `v1_baseline`, the PID, Step-10, and the trained model are untouched)
+
+ADR-016 fixed the perception *seam* (additive `PerceptionMode`, default `Classical`,
+bit-identical regression) but left the Hybrid arbitration policy provisional, including a
+"high-confidence AI can override classical / resolve disagreement" escape hatch pending real
+training results. Stage-2 training + evaluation (`docs/20 §10`, `models/stage2_test_report.json`)
+now supplies those results, and they invalidate that escape hatch.
+
+**Original assumption (ADR-016 draft policy).** High AI presence confidence could be used to
+trust an AI-only detection, or to let AI override the classical centroid on disagreement
+(`confidence ≥ high_confidence_threshold`, draft default 0.90).
+
+**Stage-2 evidence that disproves it** (frozen checkpoint epoch 9, frozen presence threshold
+0.95, untouched test split, n = 1200):
+- confidence does **not** separate correct from incorrect *accepted* detections — mean peak
+  confidence on correct (≤ 10 px) detections ≈ **0.972**, on wrong (> 25 px) detections ≈
+  **0.965**: materially overlapping distributions, not separable by any confidence cut;
+- one accepted detection at presence probability ≈ **0.999** ("very high confidence") has a
+  centroid error of ≈ **630.99 px** — a wrong-blob lock, not a near-miss (`test_000821`,
+  `generated/ai_stage2/evidence/heatmaps/FAILURE_wrong_blob__test_000821.png`);
+- standalone AI recall at the frozen safe threshold is only ≈ **40.44 %** (test precision
+  98.91 %, FPR 1.33 %) — the model itself already withholds ~60 % of judgements as unreliable
+  rather than guess; accepting an *unconfirmed* AI-only candidate would undo that caution;
+- when AI **does** agree with an independently-derived candidate, localization is excellent
+  (median ≈ **1.71 px**, P95 ≈ **5.66 px**) — the network's geometry/precision is not in
+  question, only its unaccompanied identity judgement.
+
+**Decision — the Safe Hybrid policy** (full table: `docs/19 §5`):
+
+1. **Classical + AI agree** (≤ `agreement_radius_px`) → **accept**; control-facing centroid =
+   **classical** (superior clean sub-pixel precision); diagnostic source `HybridAgreement`.
+2. **Classical only** → **accept classical**; diagnostic source `Classical`.
+3. **AI only** → **no control authority.** The AI candidate (centroid, confidence) is kept as
+   diagnostic telemetry only; control-facing result is `std::nullopt`; diagnostic rejection
+   reason `AiOnlyUnverified`. Not because the candidate is necessarily wrong — because a single
+   frame gives no way to confirm it is right.
+4. **Classical + AI disagree** (> `agreement_radius_px`) → **reject, unconditionally.** No
+   averaging, no brightness tiebreak, no confidence override — the `high_confidence_threshold`
+   escape hatch from the ADR-016 draft is **retired**. Control-facing result `std::nullopt`;
+   diagnostic rejection reason `DetectorDisagreement`. A momentary `TargetLost` is strictly
+   safer than a ~600 px commanded slew toward the wrong optical source.
+5. **Neither detects** → `std::nullopt`; diagnostic source `None` (unchanged from ADR-016).
+
+**Agreement radius.** `agreement_radius_px` is frozen at an initial Stage-3 engineering default
+of **8.0 px** — explicitly **not** an ML confidence threshold, but the source-space size of one
+heatmap cell (`INPUT_STRIDE = 8`, confirmed against `tools/ai/common.py` — 640/80 = 480/60 = 8),
+sized to absorb ordinary heatmap-grid quantization and the model's own accepted-detection error
+(median 1.71 px, P95 5.66 px) without letting a large disagreement through. Not to be tuned
+against future Stage-4 closed-loop results.
+
+**Consequence.** Under `PerceptionMode::Hybrid`, `PerceptionSource::AI` is **never emitted** —
+AI never independently supplies the control-facing centroid. `PerceptionMode::AI` (explicit,
+non-default, diagnostic/benchmark mode) is **unaffected** by this ADR: there, the thresholded
+AI candidate may be exposed as the detector's own output for evaluation, because that mode's
+job is to characterise the network, not to command the gimbal. Default production/demo
+perception remains `Classical` (ADR-016) until further validation says otherwise. Stage 3
+prioritizes safety and explainability over maximizing AI control authority.
+
+**Deferred, not abandoned — the future temporal gate.** AI-only reacquisition may be safely
+reconsidered once a runtime motion-consistency gate exists: previous accepted track history +
+current AI candidate + a consistency check, decided from **runtime observation history only**
+— never `TargetState` truth, the exact simulated `Projection`, trajectory truth, future target
+position, or any diagnostic truth-error field (the ADR-004 ground-truth boundary applies to
+this gate exactly as it does to the classical/AI detectors). This is the proper mechanism for
+resolving single-frame target-identity ambiguity — documented in `docs/19 §9` for a later
+phase; **not implemented, not scheduled as Stage 3.**
+
+**Scope of this ADR.** Documentation / architecture-decision only. No C++ written, no Python
+training code touched, no model retrained, `v1_baseline` / PID / Step-10 gates untouched. Stage
+3 has not started.

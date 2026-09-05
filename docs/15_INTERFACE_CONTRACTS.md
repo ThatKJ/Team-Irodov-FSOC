@@ -410,3 +410,14 @@ Layers stay distinct — do not alias them:
   `SimulationRunnerConfig`, **default `Classical`** (bit-identical to v1, regression-tested).
   `enum class PerceptionSource { None, Classical, AI, HybridAgreement }` is **diagnostic
   telemetry only** — never a `TrackingState` / `DemoRunState`, never read by the PID.
+- **Safe Hybrid policy (ADR-018, post-Stage-2, documentation only — Stage 3 not started).**
+  Under `PerceptionMode::Hybrid`, `PerceptionSource::AI` is **never emitted** — AI never
+  independently supplies the control-facing centroid, only confirms (case 1) or is superseded
+  by the classical centroid (case 2). An AI-only detection (case 3) and a classical/AI
+  disagreement (case 4) both resolve to `std::nullopt` with a diagnostic-only
+  `enum class PerceptionRejectionReason { NotApplicable, AiOnlyUnverified, DetectorDisagreement }`
+  — never a confidence-based override; the ADR-016 draft's `high_confidence_threshold` escape
+  hatch is retired. `agreement_radius_px` is frozen at **8.0 px** (one heatmap cell,
+  `INPUT_STRIDE`), not an ML threshold. Full policy table + evidence: `docs/19 §5`,
+  `DECISIONS.md` ADR-018. `PerceptionSource::AI` remains meaningful only under the separate,
+  explicit, non-default `PerceptionMode::AI` (diagnostic/benchmark mode) — unaffected by ADR-018.

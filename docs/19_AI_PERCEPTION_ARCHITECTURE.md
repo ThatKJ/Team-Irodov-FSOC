@@ -2,7 +2,9 @@
 
 **Status:** phase in progress on `feat/ai-perception`. `v1_baseline` is frozen and
 untouched. This document is the design contract for the learned perception stack;
-see `DECISIONS.md` ADR-015 / ADR-016 and `docs/15_INTERFACE_CONTRACTS.md`.
+see `DECISIONS.md` ADR-015 / ADR-016 / ADR-017 / **ADR-018** and
+`docs/15_INTERFACE_CONTRACTS.md`. §5 below is the Safe Hybrid policy frozen by
+ADR-018 after Stage-2 training evidence — documentation only, Stage 3 not started.
 
 ## 1. Why AI, and where it lives
 
@@ -146,33 +148,66 @@ public:
 - The controller path consumes only `std::optional<BeaconDetection>`. `confidence`
   is exposed for telemetry/hybrid logic and never reaches the PID.
 
-## 5. Perception modes & hybrid policy
+## 5. Perception modes & hybrid policy — Safe Hybrid (ADR-018, post-Stage-2)
 
 ```cpp
 enum class PerceptionMode   { Classical, AI, Hybrid };            // control-relevant selection
 enum class PerceptionSource { None, Classical, AI, HybridAgreement };  // DIAGNOSTIC only
+enum class PerceptionRejectionReason {                            // DIAGNOSTIC only —
+    NotApplicable, AiOnlyUnverified, DetectorDisagreement          // meaningful iff result == nullopt
+};
 ```
 
 `SimulationRunnerConfig` gains a `PerceptionMode` field, **default `Classical`**
-(bit-identical to v1 — regression-tested). Hybrid policy (all thresholds
-config-driven, defaults below):
+(bit-identical to v1 — regression-tested). `PerceptionMode::Hybrid` is the **Safe
+Hybrid** policy below. It replaces the ADR-016 draft's confidence-override escape
+hatch, which Stage-2 training evidence invalidated (ADR-018 §"Stage-2 evidence").
+All thresholds config-driven.
 
-| situation | action | `PerceptionSource` |
-|---|---|---|
-| classical **and** AI detect, centroids within `agreement_radius_px` (default 2.0) | use the **classical** centroid (best clean sub-pixel precision) | `HybridAgreement` |
-| only AI detects, `confidence ≥ presence_threshold` | use AI | `AI` |
-| only classical detects | use classical | `Classical` |
-| both detect but centroids disagree > `agreement_radius_px` | if `confidence ≥ high_confidence_threshold` (default 0.90) use AI, else return `std::nullopt` (perception ambiguity → safe hold) | `AI` / `None` |
-| neither detects | `std::nullopt` | `None` |
+| case | situation | control-facing result | `PerceptionSource` | rejection reason |
+|---|---|---|---|---|
+| 1 | classical **and** AI detect, centroids within `agreement_radius_px` (**8.0 px**, frozen — see below; not an ML threshold) | **classical** centroid (best clean sub-pixel precision) | `HybridAgreement` | — |
+| 2 | classical only | classical centroid | `Classical` | — |
+| 3 | **AI only** | `std::nullopt` — **no control authority.** AI candidate (centroid, confidence) retained as diagnostics only | `None` | `AiOnlyUnverified` |
+| 4 | classical **and** AI disagree (> `agreement_radius_px`) | `std::nullopt` — **unconditional reject**, no confidence override | `None` | `DetectorDisagreement` |
+| 5 | neither detects | `std::nullopt` | `None` | `NotApplicable` |
 
-Two unrelated detections are **never averaged**. On `std::nullopt` the existing
-target-loss policy runs unchanged (PID reset, zero command, camera holds).
+Two unrelated detections are **never averaged**; the brightest is never preferred;
+AI confidence is **never** an override path for cases 3/4 (retired by ADR-018). On
+`std::nullopt` the existing target-loss policy runs unchanged (PID reset, zero
+command, camera holds).
+
+**Why cases 3 and 4 both reject unconditionally.** Stage-2 test evidence: peak
+confidence does not separate correct (mean ≈ 0.972) from wrong (mean ≈ 0.965)
+*accepted* detections, and one accepted detection at confidence ≈ 0.999 has a
+≈ 630.99 px centroid error (`FAILURE_wrong_blob__test_000821.png`). No confidence
+cut safely resolves either "AI alone" or "AI disagrees with classical" — a
+momentary `TargetLost` is strictly safer than commanding toward a wrong optical
+source. Full evidence and rationale: `DECISIONS.md` ADR-018.
+
+**Agreement radius (frozen).** `agreement_radius_px = 8.0` px — the source-space
+size of one heatmap cell (`INPUT_STRIDE = 8`, §3 above; 640/80 = 480/60 = 8), sized
+to absorb ordinary heatmap-grid quantization and the model's own accepted-detection
+error (median 1.71 px, P95 5.66 px test) without letting a large disagreement
+through. **Not** an ML confidence threshold; **not** to be tuned against future
+Stage-4 closed-loop results.
+
+**`PerceptionMode::AI` is a different thing.** That explicit, non-default mode
+exists for diagnostics and controlled comparison — there the thresholded AI
+candidate *is* exposed as the detector output, because the point of that mode is
+to characterise the network, not to drive the gimbal. This does **not** relax case
+3 above: `PerceptionMode::Hybrid` never grants an AI-only detection control
+authority, and `PerceptionSource::AI` is never emitted under Hybrid mode. Default
+production/demo perception remains `Classical` (ADR-016) until further validation
+changes that.
 
 ## 6. Diagnostics (telemetry only — never control)
 
-`ai_confidence`, `perception_source`, `classical_ai_distance_px`,
-`ai_inference_ms`. These are additive telemetry fields; they do not touch
-`TrackingState` / `DemoRunState` and the PID never reads them.
+`ai_confidence`, `perception_source`, `perception_rejection_reason` (ADR-018 —
+meaningful iff the control-facing result is `std::nullopt` under
+`PerceptionMode::Hybrid`), `classical_ai_distance_px`, `ai_inference_ms`. These are
+additive telemetry fields; they do not touch `TrackingState` / `DemoRunState` and
+the PID never reads them.
 
 ## 7. Synthetic-to-real limitation
 
@@ -188,3 +223,32 @@ is stated in `models/MODEL_CARD.md` and must not be overstated in the demo.
 Phase 2 spatio-temporal (3-frame) detector · Phase 3 UKF state estimation ·
 Phase 4 motion prediction / feed-forward · Phase 5 MPC · Phase 6 satellite
 ephemeris + SGP4 coarse pointing · Phase 7 real camera + physical gimbal.
+
+## 9. Future temporal reacquisition gate (ADR-018 — documented only, not implemented)
+
+Safe Hybrid case 3 (§5) gives AI-only detections no control authority because a
+single frame cannot confirm target identity. That may be safely reconsidered once
+a runtime motion-consistency gate exists — this is the Phase-2 spatio-temporal
+detector (§8) made concrete for the AI-only case specifically:
+
+```
+previous accepted track
+        +
+current AI candidate
+        ↓
+temporal consistency  (motion-consistency gate)
+        ↓
+trusted reacquisition candidate
+```
+
+**Inputs:** the previously **accepted** control-facing centroid / track history and
+recent target velocity, both derived from **runtime observation only**. The gate
+**MUST NOT** use `TargetState` truth, the exact simulated `Projection`, trajectory
+truth, future target position, or any diagnostic truth-error field — the ADR-004
+ground-truth boundary (`docs/15 §"Layers stay distinct"`) applies to this gate
+exactly as it does to the classical and AI detectors themselves.
+
+This is the proper mechanism for resolving single-frame target-identity ambiguity —
+**not** a wider `agreement_radius_px`, **not** a confidence override on cases 3/4.
+Not scheduled as Stage 3; not implemented; no interface frozen here beyond the
+constraint above.
